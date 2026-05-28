@@ -819,17 +819,28 @@ def main():
     oos_result = None
     oos_scored = None
 
-    # Move OOS-reserved period to end
+    # Move OOS-reserved period(s) to end.
+    # --oos-reserve YYYY holds out EVERY period whose FORWARD year == YYYY so
+    # that no part of the OOS year leaks into training. (Matching p[0]/cutoff
+    # would mismatch: the full-year-2024 period has cutoff 2023-12-31.) The
+    # full-year period (latest forward date) is reported as the single OOS
+    # result; any other same-forward-year period (e.g. an overlapping H2
+    # window) is also excluded from training but not reported.
     periods = list(PERIODS)
+    heldout_idxs = set()
+    oos_report_idx = None
     if args.oos_reserve:
-        oos_idx = None
-        for i, p in enumerate(periods):
-            if args.oos_reserve in p[0]:
-                oos_idx = i
-                break
-        if oos_idx is not None:
-            oos_period = periods.pop(oos_idx)
-            periods.append(oos_period)
+        matches = [i for i, p in enumerate(periods)
+                   if p[1][:4] == args.oos_reserve]
+        if not matches:
+            sys.exit(f'ERROR: no period with forward year {args.oos_reserve!r}. '
+                     f'Available forward years: {[p[1][:4] for p in periods]}')
+        oos_report_period = max((periods[i] for i in matches), key=lambda p: p[1])
+        keep = [p for i, p in enumerate(periods) if i not in matches]
+        heldout = [periods[i] for i in matches]
+        periods = keep + heldout
+        heldout_idxs = set(range(len(keep), len(periods)))
+        oos_report_idx = periods.index(oos_report_period)
 
     for idx, (cutoff_str, forward_str, t10y, ism, curve, cpi, oas) in enumerate(periods):
         summary, scored = run_one_period(
@@ -849,10 +860,14 @@ def main():
         if summary['n'] > 0 and 'top_tickers' in summary:
             prev_top_tickers = summary['top_tickers']
 
-        if args.oos_reserve and oos_idx is not None and idx == len(periods) - 1:
-            oos_result = summary
-            oos_scored = scored
-            summary['is_oos'] = True
+        if args.oos_reserve and idx in heldout_idxs:
+            # Held out from training entirely. Only the full-year period is
+            # reported as OOS; other same-forward-year periods are excluded
+            # silently (prevents 2024 leaking into training summary stats).
+            summary['is_oos'] = (idx == oos_report_idx)
+            if idx == oos_report_idx:
+                oos_result = summary
+                oos_scored = scored
         else:
             summary['is_oos'] = False
             if scored is not None:
@@ -1128,6 +1143,12 @@ def main():
         print(f'  Stocks:     {oos_result["n"]}')
         print(f'  Top decile: {oos_result["top_mean"]:>+7.2%}')
         print(f'  Bot decile: {oos_result["bot_mean"]:>+7.2%}')
+        print(f'  Universe:   {oos_result["universe_mean"]:>+7.2%}')
+        ta_oos = oos_result.get('top_alpha', np.nan)
+        print(f'  TOP-ALPHA:  {ta_oos:>+7.2%}  <-- PRIMARY (top decile - universe)')
+        tan_oos = oos_result.get('top_alpha_net', np.nan)
+        if pd.notna(tan_oos):
+            print(f'  Top-alpha net: {tan_oos:>+7.2%}')
         print(f'  Spread:     {oos_result["spread"]:>+7.2%}')
         sn_oos = oos_result.get('spread_net', np.nan)
         print(f'  Net spread: {sn_oos:>+7.2%}' if pd.notna(sn_oos) else '')

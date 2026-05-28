@@ -42,3 +42,16 @@ another in-sample fit. The honest responses to a disappointing OOS are:
 The known limitation: 2024 is a SINGLE out-of-sample year. Even a strong
 result is one data point. It must be read together with the OOS IC and the
 Phase 4.1 subperiod consistency check before any capital decision.
+
+## Allowed change during freeze
+
+Fixed `--oos-reserve` matching in `scripts/backtest.v2.py` to match the
+FORWARD year (`p[1][:4]`) instead of a substring of the cutoff (`p[0]`).
+Without this, `--oos-reserve 2024` matched nothing (no cutoff contains
+"2024"; the full-year-2024 period has cutoff 2023-12-31). The fix also
+holds out BOTH periods whose forward year is 2024 (forwards 2024-06-30 and
+2024-12-31) from the training summary so no part of 2024 leaks into
+training, and reports only the full-year period (forward 2024-12-31) as the
+single OOS result. Also added a `top_alpha`/`top_alpha_net`/`Universe`
+line to the OOS print block (report-only). None of this touches scoring
+logic; the frozen config is unchanged.
