@@ -55,3 +55,50 @@ training, and reports only the full-year period (forward 2024-12-31) as the
 single OOS result. Also added a `top_alpha`/`top_alpha_net`/`Universe`
 line to the OOS print block (report-only). None of this touches scoring
 logic; the frozen config is unchanged.
+
+## REALIZED RESULT (run-id: oos_2024_locked)
+
+Frozen commit: 6aed4a335aff397c07ae0885eccc558697d398f9
+Run date: 2026-05-27
+
+```
+TRAINING PERIODS (4 periods, forwards 2022 & 2023; both 2024 forwards held out):
+  Mean top_alpha:     +5.25%   (net +5.05%)
+  Mean IC:            +0.1467  (std 0.0574, 4/4 periods IC > 0)
+  Alpha hit rate:     3/4
+
+OUT-OF-SAMPLE (2023-12-31 -> 2024-12-31, held out):
+  Stocks:             1930
+  Top decile mean:    +11.89%
+  Universe mean:       +3.43%
+  Bottom decile:       +1.13%
+  TOP-DECILE ALPHA:    +8.46%   <-- primary metric
+  Top-alpha net:       +7.77%
+  OOS IC:             +0.1666   <-- confirming metric
+  OOS spread:         +10.76%   (net +11.76%)
+
+VERDICT (per pre-registered rules):
+  top_alpha = +8.46% falls in band: > +6%  ("Model generalizes; edge is real")
+  OOS IC = +0.1666 is CONFIRMING: inside the training 1-std band
+    [+0.089, +0.204] (training mean +0.1467, std 0.0574) -> strongly confirming.
+  top_alpha_net = +7.77% > 0 and gross alpha > +3% -> survives costs.
+  Action triggered: PROCEED TO PHASE 4.
+```
+
+### Caveats (recorded, not rationalizations)
+
+- **Single OOS year.** 2024 is one data point. The strong result must still be
+  read against the Phase 4.1 subperiod consistency check before any capital
+  decision.
+- **Suspicion check (>+12% alpha) NOT triggered.** OOS alpha +8.46% and
+  top-decile absolute return +11.89% are both below the +12% "be suspicious of a
+  concentrated AI-capex bet" threshold, so the mandatory sector-concentration
+  cross-check was not required.
+- **Concentration cross-check unavailable from this run.** The audit save loop
+  only persists scored CSVs for training periods (held-out periods are excluded),
+  so the OOS top-decile sector mix was not written to disk. NOT re-running to
+  obtain it (run-once discipline). A future report-only diagnostic should persist
+  `oos_scored` to compute this without a re-run.
+- **OOS top-decile (+11.89%) trailed the in-sample 2023->2024 (+14.99%) and the
+  full-year in-sample (+7.66%) figures** noted in Phase 1 — i.e. the held-out
+  result is in a sane range, neither collapsing (<+2%) nor implausibly high.
