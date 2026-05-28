@@ -1,0 +1,107 @@
+# SimFin IndustryId -> GICS sub-industry / industry mapping
+# Sub-industry codes (8-digit) are preferred. Industry codes (6-digit) used when
+# the SimFin industry is broader than a single GICS sub-industry.
+# Review these mappings and adjust as needed for accuracy.
+---
+mappings:
+  # === Energy (GICS Sector 10) ===
+  107001: "10102030"   # Oil & Gas - Refining & Marketing -> Oil & Gas Refining & Marketing
+  107002: "10102020"   # Oil & Gas - E&P -> Oil & Gas Exploration & Production
+  107003: "10102040"   # Oil & Gas - Midstream -> Oil & Gas Storage & Transportation
+  107004: "10101020"   # Oil & Gas - Services -> Oil & Gas Equipment & Services
+  107005: "10102010"   # Oil & Gas - Integrated -> Integrated Oil & Gas
+  107007: "101020"     # Alternative Energy Sources & Other -> Oil, Gas & Consumable Fuels (industry)
+  107006: "10101010"   # Oil & Gas - Drilling -> Oil & Gas Drilling
+  110006: "10102050"   # Coal -> Coal & Consumable Fuels
+
+  # === Materials (GICS Sector 15) ===
+  110001: "151010"     # Chemicals -> Chemicals (industry - covers all types)
+  110002: "15105010"   # Forest Products -> Forest Products
+  110004: "151040"     # Metals & Mining -> Metals & Mining (industry)
+  110005: "15102010"   # Building Materials -> Construction Materials
+  110007: "15104050"   # Steel -> Steel
+  110003: "30202010"   # Agriculture -> Agricultural Products & Services
+
+  # === Industrials (GICS Sector 20) ===
+  100001: "20106020"   # Industrial Products -> Industrial Machinery & Supplies & Components
+  100002: "20201070"   # Business Services -> Diversified Support Services
+  100003: "20103010"   # Engineering & Construction -> Construction & Engineering
+  100004: "20201050"   # Waste Management -> Environmental & Facilities Services
+  100005: "20107010"   # Industrial Distribution -> Trading Companies & Distributors
+  100006: "20302010"   # Airlines -> Passenger Airlines
+  100007: "20202020"   # Consulting & Outsourcing -> Research & Consulting Services
+  100008: "20101010"   # Aerospace & Defense -> Aerospace & Defense
+  100009: "201060"     # Farm & Construction Machinery -> Machinery (industry)
+  100010: "203010"     # Transportation & Logistics -> Air Freight & Logistics (industry)
+  100011: "20202010"   # Employment Services -> Human Resource & Employment Services
+  100012: "20304030"   # Truck Manufacturing -> Cargo Ground Transportation
+  100013: "20105010"   # Conglomerates -> Industrial Conglomerates
+  108002: "20202020"   # Consulting -> Research & Consulting Services
+  108003: "20202010"   # HR & Staffing -> Human Resource & Employment Services
+
+  # === Consumer Discretionary (GICS Sector 25) ===
+  103002: "255040"     # Retail - Apparel & Specialty -> Specialty Retail (industry)
+  103004: "25203010"   # Manufacturing - Apparel & Furniture -> Apparel, Accessories & Luxury Goods
+  103005: "25102010"   # Autos -> Automobile Manufacturers
+  103001: "50202010"   # Entertainment -> Movies & Entertainment
+  103003: "25301040"   # Restaurants -> Restaurants
+  103011: "50201010"   # Advertising & Marketing Services -> Advertising
+  103013: "25201030"   # Homebuilding & Construction -> Homebuilding
+  103015: "25301020"   # Travel & Leisure -> Hotels, Resorts & Cruise Lines
+  103018: "151030"     # Packaging & Containers -> Containers & Packaging (industry)
+  103020: "25302020"   # Personal Services -> Specialized Consumer Services
+  103026: "50201040"   # Publishing -> Publishing
+
+  # === Consumer Staples (GICS Sector 30) ===
+  102001: "30101030"   # Retail - Defensive -> Food Retail
+  102002: "30202030"   # Consumer Packaged Goods -> Packaged Foods & Meats
+  102003: "30203010"   # Tobacco Products -> Tobacco
+  102004: "30201010"   # Beverages - Alcoholic -> Brewers
+  102005: "30201030"   # Beverages - Non-Alcoholic -> Soft Drinks & Non-alcoholic Beverages
+  102006: "25302010"   # Education -> Education Services
+
+  # === Health Care (GICS Sector 35) ===
+  106001: "35101010"   # Medical Diagnostics & Research -> Health Care Equipment
+  106002: "35201010"   # Biotechnology -> Biotechnology
+  106003: "35101010"   # Medical Instruments & Equipment -> Health Care Equipment
+  106004: "35101010"   # Medical Devices -> Health Care Equipment
+  106005: "35202010"   # Drug Manufacturers -> Pharmaceuticals
+  106006: "35102030"   # Health Care Plans -> Managed Health Care
+  106011: "35102015"   # Health Care Providers -> Health Care Services
+  106014: "35102010"   # Medical Distribution -> Health Care Distributors
+
+  # === Financials (GICS Sector 40) ===
+  104002: "401010"     # Banks -> Banks (industry: covers diversified + regional)
+  104001: "40203010"   # Asset Management -> Asset Management & Custody Banks
+  104003: "40203020"   # Brokers, Exchanges & Other -> Investment Banking & Brokerage
+  104004: "40301020"   # Insurance - Life -> Life & Health Insurance
+  104005: "40301040"   # Insurance -> Property & Casualty Insurance
+  104006: "40301040"   # Insurance - Property & Casualty -> Property & Casualty Insurance
+  104007: "40202010"   # Credit Services -> Consumer Finance
+  104013: "40301010"   # Insurance - Specialty -> Insurance Brokers
+
+  # === Information Technology (GICS Sector 45) ===
+  101001: "45202030"   # Computer Hardware -> Technology Hardware, Storage & Peripherals
+  101002: "50203010"   # Online Media -> Interactive Media & Services
+  101003: "45103010"   # Application Software -> Application Software
+  101004: "45301020"   # Semiconductors -> Semiconductors
+  101005: "45201020"   # Communication Equipment -> Communications Equipment
+
+  # === Communication Services (GICS Sector 50) ===
+  108001: "50101020"   # Communication Services -> Integrated Telecommunication Services
+
+  # === Utilities (GICS Sector 55) ===
+  105001: "55101010"   # Utilities - Regulated -> Electric Utilities
+  105002: "55105010"   # Utilities - Independent Power Producers -> Independent Power Producers & Energy Traders
+
+  # === Real Estate (GICS Sector 60) ===
+  109001: "60101010"   # REITs -> Diversified REITs (covers all REIT subtypes)
+  109002: "60201040"   # Real Estate Services -> Real Estate Services
+
+  # === Other / Unclassified ===
+  111001: "20105010"   # Diversified Holdings -> Industrial Conglomerates (best proxy)
+  108004: "20201070"   # Other -> Diversified Support Services
+
+# Industry-level fallback codes (6-digit) used when sub-industry mapping is too specific
+# These serve as the ranked grouping key for companies in that SimFin industry.
+# The ranking function will step up from sub-industry -> industry -> sector if N < 8.

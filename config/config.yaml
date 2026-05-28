@@ -1,0 +1,61 @@
+# Global configuration for Stock Screener v2
+---
+screener:
+  universe:
+    min_market_cap: 300_000_000
+    min_dollar_volume: 1_000_000
+    stale_days: 548
+
+  data_lag:
+    fundamentals_min_days: 45
+    fundamentals_max_days: 90
+    filing_lag_annual_days: 90
+    filing_lag_quarterly_days: 45
+
+  scoring:
+    sentiment_default_weight: 0.15
+    min_coverage: 0.50
+    min_sector_population: 30
+    rank_group_min: 8
+    contrarian_mode: false
+    orthogonalize: false
+    min_subindustry_n: 8
+    min_industry_group_n: 8
+
+  alpha_signals:
+    eps_revision_days: 90
+    momentum_12_1m: true
+    decay_weight_days: 30
+    ic_rolling_years: 3
+
+  portfolio:
+    position_trade:
+      weights: {V: 0.20, Q: 0.25, G: 0.25, S: 0.30}
+      momentum_filter: "12-1_top_quintile"
+      stop_loss: -0.15
+      max_holding_months: 6
+
+    core_long_term:
+      weights: {V: 0.40, Q: 0.35, G: 0.15, S: 0.10}
+      rebalance: "quarterly"
+      hard_sell_score_threshold: 25
+
+    value_compounder:
+      weights: {V: 0.30, Q: 0.40, G: 0.20, S: 0.10}
+
+backtest:
+  walk_forward:
+    train_years: 5
+    test_years: 1
+    min_periods: 4
+
+  costs:
+    large_cap_bps: 20
+    small_cap_bps: 50
+    market_impact_factor: 0.1
+
+  capacity:
+    max_position_pct_adv: 10
+
+  reporting:
+    metrics: [sharpe, calmar, max_dd, hit_rate, decile_spread, ic_by_factor, turnover]

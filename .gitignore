@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Large data / caches (not source of truth for the experiment)
+*.db
+data/simfin/
+data/*.db
+data/*.log
+
+# Backups
+*.bak
+
+# Raw run outputs / dumps
+*.output
+*_output.txt
+*.zip
+*.jsonl
+
+# Botched-redirect 0-byte junk fragments in repo root
+/+*
+/(*
+/0)
+/float
+/threshold,+
+/${MIN_MARKET_CAP
+/large_thresh
+/val],
+/500%
+/60
+/72s}'),
+/24h)
+/2.6

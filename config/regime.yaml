@@ -1,0 +1,107 @@
+# Regime classifier configuration
+# State variables for determining macro regime
+---
+regimes:
+  R1: &goldilocks
+    label: "Disinflationary Expansion (Goldilocks)"
+    conditions:
+      ism: {op: ">=", value: 50}
+      inflation_trend: "falling"
+      curve: "positive"
+      hy_oas: {op: "<=", value: 300}
+    sector_tilts:
+      overweight: [4510, 5020, 2550]  # Tech, Comm Services, Disc Retail
+      underweight: [1010, 3020]       # Energy, Staples
+    factor_modulation:
+      V: 0.30
+      Q: 0.25
+      G: 0.30
+      S: 0.15
+    tilt_magnitude: 7
+
+  R2: &reflationary
+    label: "Reflationary Expansion"
+    conditions:
+      ism: {op: ">=", value: 50}
+      inflation_trend: "rising"
+      curve: "steepening_or_inverted"
+      hy_oas: {op: "<=", value: 450}
+    sector_tilts:
+      overweight: [1010, 1510, 2010, 6010]  # Energy, Materials, Industrials, REITs
+      underweight: [4510, 2550, 4010]        # Tech, Disc Retail, Banks
+    factor_modulation:
+      V: 0.35
+      Q: 0.25
+      G: 0.20
+      S: 0.20
+    tilt_magnitude: 7
+
+  R3: &stagflation
+    label: "Late-cycle / Stagflation"
+    conditions:
+      ism: {op: ">=", value: 48}
+      inflation_trend: "sticky"
+      curve: "flat_or_inverted"
+      hy_oas: {op: "<=", value: 500}
+    sector_tilts:
+      overweight: [3020, 3510, 5510, 2010]  # Staples, Healthcare, Utilities, Defense
+      underweight: [2550, 4510, 2510]        # Disc Retail, Tech, Autos
+    factor_modulation:
+      V: 0.30
+      Q: 0.30
+      G: 0.15
+      S: 0.25
+    tilt_magnitude: 5
+
+  R4: &recession
+    label: "Recession"
+    conditions:
+      ism: {op: "<", value: 48}
+      inflation_trend: "falling"
+      curve: "steepening"
+      hy_oas: {op: ">", value: 500}
+    sector_tilts:
+      overweight: [3020, 5510, 3510]  # Staples, Utilities, Healthcare
+      underweight: [4010, 2550, 1510]  # Financials, Disc Retail, Materials
+    factor_modulation:
+      V: 0.25
+      Q: 0.40
+      G: 0.10
+      S: 0.25
+    tilt_magnitude: 10
+
+  R5: &recovery
+    label: "Recovery"
+    conditions:
+      ism: {op: ">=", value: 45}
+      inflation_trend: "rising_from_low"
+      curve: "steep"
+      hy_oas: {op: "<=", value: 400}
+    sector_tilts:
+      overweight: [4010, 2010, 2510]  # Financials, Industrials, Disc
+      underweight: [3020, 5510]        # Staples, Utilities
+    factor_modulation:
+      V: 0.30
+      Q: 0.25
+      G: 0.30
+      S: 0.15
+    tilt_magnitude: 7
+
+current_regime: "R2_R3"  # May 2026: borderline reflationary/stagflation
+
+# Threshold triggers that change recommendations (§5.6 Framework)
+threshold_triggers:
+  ism_below_48_hy_above_500:
+    regime: R4
+    overweight: {S: 7, H: 7, U: 7}  # Staples, Healthcare, Utilities
+    underweight: {F: 7, D: 7, M: 7}  # Financials, Disc, Materials
+
+  curve_invert_50bps_60days:
+    action: "cut_financials_3pp"
+
+  wti_above_120:
+    action: "trim_energy_3pp"
+
+  core_cpi_below_2_5:
+    regime: R1
+    overweight: {T: 7, C: 7, D: 7}  # Tech, Comm, Disc

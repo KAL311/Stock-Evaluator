@@ -1,0 +1,152 @@
+{
+  "run_id": "phase2_mi_hc_reweight",
+  "timestamp": "20260526_153424",
+  "n_periods": 6,
+  "oos_reserve": null,
+  "results": [
+    {
+      "label": "sentiment",
+      "n": 1873,
+      "spread": 0.2958564747226568,
+      "spread_net": 0.2974203045098909,
+      "ic": 0.31805457979505314,
+      "regime": "R2",
+      "factor_ics": {
+        "valuation_score": 0.3611,
+        "quality_score": 0.2752,
+        "growth_score": NaN,
+        "sentiment_score": -0.1044
+      },
+      "hrp": {
+        "hrp_fwd": -0.07575356921088716,
+        "hrp_dd": -0.17504807837300917,
+        "hrp_calmar": -0.40066636897573865,
+        "ew_fwd": -0.16124972077380995,
+        "ew_dd": -0.23017734540177093,
+        "vol_reduction_pct": 6.809089350770674,
+        "n_hrp": 186,
+        "max_weight": 0.028092041288846487
+      }
+    },
+    {
+      "label": "sentiment",
+      "n": 1959,
+      "spread": 0.28469535830791975,
+      "spread_net": 0.2866545419813891,
+      "ic": 0.27531843572722264,
+      "regime": "R2",
+      "factor_ics": {
+        "valuation_score": 0.3338,
+        "quality_score": 0.1969,
+        "growth_score": NaN,
+        "sentiment_score": 0.0047
+      },
+      "hrp": {
+        "hrp_fwd": -0.060669154011914084,
+        "hrp_dd": -0.1378770952745011,
+        "hrp_calmar": -0.4071445833989146,
+        "ew_fwd": -0.0826615304217958,
+        "ew_dd": -0.1677100610944352,
+        "vol_reduction_pct": 23.903536549478506,
+        "n_hrp": 194,
+        "max_weight": 0.07905152014226177
+      }
+    },
+    {
+      "label": "sentiment",
+      "n": 1773,
+      "spread": 0.1913797576817634,
+      "spread_net": 0.19367189251322406,
+      "ic": 0.14901643890661503,
+      "regime": "R2",
+      "factor_ics": {
+        "valuation_score": 0.0226,
+        "quality_score": 0.1348,
+        "growth_score": 0.1227,
+        "sentiment_score": 0.0553
+      },
+      "hrp": {
+        "hrp_fwd": 0.10244117386999751,
+        "hrp_dd": -0.10530463467557394,
+        "hrp_calmar": 0.8945619924921213,
+        "ew_fwd": 0.20620992956005502,
+        "ew_dd": -0.12587162677592634,
+        "vol_reduction_pct": 27.060834009110955,
+        "n_hrp": 178,
+        "max_weight": 0.05915033483317146
+      }
+    },
+    {
+      "label": "sentiment",
+      "n": 1694,
+      "spread": -0.021716077787656246,
+      "spread_net": -0.019810195434715128,
+      "ic": 0.07617356578700023,
+      "regime": "R3",
+      "factor_ics": {
+        "valuation_score": 0.0203,
+        "quality_score": 0.0877,
+        "growth_score": 0.0545,
+        "sentiment_score": -0.0239
+      },
+      "hrp": {
+        "hrp_fwd": 0.13232228768042176,
+        "hrp_dd": -0.08107809000659083,
+        "hrp_calmar": 1.4991679334568988,
+        "ew_fwd": 0.18137680733594053,
+        "ew_dd": -0.10787517920536471,
+        "vol_reduction_pct": 26.068020610253328,
+        "n_hrp": 170,
+        "max_weight": 0.03686494870812716
+      }
+    },
+    {
+      "label": "sentiment",
+      "n": 1780,
+      "spread": 0.23985040799564317,
+      "spread_net": 0.2419740035012612,
+      "ic": 0.2191620130173331,
+      "regime": "R3",
+      "factor_ics": {
+        "valuation_score": 0.125,
+        "quality_score": 0.127,
+        "growth_score": 0.0562,
+        "sentiment_score": 0.1245
+      },
+      "hrp": {
+        "hrp_fwd": 0.12166902742756758,
+        "hrp_dd": -0.08375344935330142,
+        "hrp_calmar": 1.3349409992861931,
+        "ew_fwd": 0.15100339437404497,
+        "ew_dd": -0.11108061298195537,
+        "vol_reduction_pct": 18.335103557685173,
+        "n_hrp": 177,
+        "max_weight": 0.027624253850053227
+      }
+    },
+    {
+      "label": "sentiment",
+      "n": 1734,
+      "spread": 0.13584681778862212,
+      "spread_net": 0.1379502660644842,
+      "ic": 0.15570058163703884,
+      "regime": "R3",
+      "factor_ics": {
+        "valuation_score": -0.0137,
+        "quality_score": 0.0116,
+        "growth_score": 0.0847,
+        "sentiment_score": 0.1839
+      },
+      "hrp": {
+        "hrp_fwd": 0.18667427933825098,
+        "hrp_dd": -0.04970359947376479,
+        "hrp_calmar": 3.4434775093655783,
+        "ew_fwd": 0.17486718675603785,
+        "ew_dd": -0.051983947842570655,
+        "vol_reduction_pct": 10.125929467640574,
+        "n_hrp": 174,
+        "max_weight": 0.037741425135323775
+      }
+    }
+  ]
+}

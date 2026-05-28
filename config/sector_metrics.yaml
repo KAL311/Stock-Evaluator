@@ -1,0 +1,538 @@
+# Sector-specific metric maps, weights, and hard exclusion rules.
+# Keyed by GICS industry code (6-digit) or sub-industry code (8-digit).
+# Fallback chain: sub-industry -> industry -> sector -> default.
+# 
+# References:
+#   §5.2 - Sector-Specific Metric Maps (Framework)
+#   §5.4 - Sector-Specific Factor Weights
+#
+# weight: one of 'V' (Valuation), 'Q' (Quality), 'G' (Growth), 'S' (Sentiment)
+# higher_is_better: True if higher raw value = better (default True)
+---
+defaults:
+  weights: {V: 0.30, Q: 0.30, G: 0.25, S: 0.15}
+  min_coverage: 0.50
+  rank_group_min: 8
+
+sectors:
+  # ============= ENERGY (GICS 1010) =============
+  "101010": &energy_services  # Energy Equipment & Services
+    valuation: [ev_ebitda, fcf_yield]
+    quality: [roce_3y, fcf_margin_3y_med, debt_ebitda_inv]
+    growth: [revenue_growth_3yr, ebitda_trend_5y]
+    sentiment: [eps_revision_90d, price_mom_12_1, return_6m]
+    weights: {V: 0.40, Q: 0.25, G: 0.15, S: 0.20}
+    hard_exclude:
+      debt_ebitda: {op: ">", value: 2.5}
+
+  "101020": &energy_oil_gas  # Oil, Gas & Consumable Fuels
+    valuation: [ev_ebitda, fcf_yield, p_pe_trailing]
+    quality: [roce_3y, fcf_margin_3y_med, debt_ebitda_inv, low_leverage]
+    growth: [production_growth, ebitda_trend_5y, revenue_growth_3yr]
+    sentiment: [eps_revision_90d, price_mom_12_1, return_6m]
+    weights: {V: 0.40, Q: 0.25, G: 0.15, S: 0.20}
+    hard_exclude:
+      debt_ebitda: {op: ">", value: 2.5}
+
+  # ============= MATERIALS (GICS 1510) =============
+  "151010": &materials_chemicals  # Chemicals
+    valuation: [ev_ebitda, fcf_yield, p_pe_trailing]
+    quality: [roic_3y_med, fcf_margin_3y_med, debt_ebitda_inv]
+    growth: [revenue_growth_3yr, ebitda_trend_5y, revenue_trend_5y]
+    sentiment: [eps_revision_90d, price_mom_12_1]
+    weights: {V: 0.35, Q: 0.25, G: 0.20, S: 0.20}
+    hard_exclude:
+      roic_3y_med: {op: "<", value: 0.08}
+
+  "151020": &materials_construction  # Construction Materials
+    valuation: [ev_ebitda, fcf_yield]
+    quality: [roic_3y_med, gross_margin, operating_margin_3y_med]
+    growth: [revenue_growth_3yr, revenue_trend_5y]
+    sentiment: [price_mom_12_1, return_6m]
+    weights: {V: 0.35, Q: 0.25, G: 0.20, S: 0.20}
+
+  "151030": &materials_packaging  # Containers & Packaging
+    valuation: [fcf_yield, ev_ebitda]
+    quality: [roic_3y_med, fcf_margin_3y_med, debt_ebitda_inv]
+    growth: [revenue_growth_3yr]
+    sentiment: [price_mom_12_1]
+    weights: {V: 0.30, Q: 0.30, G: 0.20, S: 0.20}
+
+  "151040": &materials_metals  # Metals & Mining
+    valuation: [ev_ebitda, p_pe_trailing, fcf_yield]
+    quality: [roce_3y, fcf_margin_3y_med, debt_ebitda_inv, low_leverage]
+    growth: [ebitda_trend_5y, revenue_growth_3yr]
+    sentiment: [price_mom_12_1, return_6m]
+    weights: {V: 0.35, Q: 0.25, G: 0.20, S: 0.20}
+
+  "151050": &materials_paper  # Paper & Forest Products
+    valuation: [fcf_yield, ev_ebitda]
+    quality: [roic_3y_med, fcf_margin_3y_med]
+    growth: [revenue_trend_5y]
+    sentiment: [price_mom_12_1]
+    weights: {V: 0.30, Q: 0.30, G: 0.20, S: 0.20}
+
+  # ============= INDUSTRIALS (GICS 2010-2030) =============
+  "201010": &industrials_aero_def  # Aerospace & Defense
+    valuation: [ev_ebitda, p_pe_trailing, fcf_yield]
+    quality: [roic_3y_med, fcf_margin_3y_med, backlog_revenue, operating_margin_3y_med]
+    growth: [revenue_growth_3yr, backlog_growth, ebitda_trend_5y]
+    sentiment: [eps_revision_90d, price_mom_12_1]
+    weights: {V: 0.30, Q: 0.30, G: 0.25, S: 0.15}
+    hard_exclude:
+      roic_3y_med: {op: "<", value: 0.10}
+
+  "201020": &industrials_building  # Building Products
+    valuation: [ev_ebitda, p_pe_trailing]
+    quality: [roic_3y_med, gross_margin, operating_margin_3y_med]
+    growth: [revenue_growth_3yr, revenue_trend_5y]
+    sentiment: [eps_revision_90d, price_mom_12_1]
+    weights: {V: 0.30, Q: 0.30, G: 0.25, S: 0.15}
+
+  "201030": &industrials_const_eng  # Construction & Engineering
+    valuation: [ev_ebitda, p_pe_trailing]
+    quality: [roic_3y_med, operating_margin_3y_med, low_leverage]
+    growth: [revenue_growth_3yr, backlog_growth, revenue_trend_5y]
+    sentiment: [price_mom_12_1, eps_revision_90d]
+    weights: {V: 0.30, Q: 0.30, G: 0.25, S: 0.15}
+
+  "201040": &industrials_electrical  # Electrical Equipment
+    valuation: [ev_ebitda, p_pe_trailing, fcf_yield]
+    quality: [roic_3y_med, gross_margin, operating_margin_3y_med]
+    growth: [backlog_growth, revenue_growth_3yr, ebitda_trend_5y]
+    sentiment: [eps_revision_90d, price_mom_12_1]
+    weights: {V: 0.30, Q: 0.30, G: 0.25, S: 0.15}
+
+  "201050": &industrials_conglom  # Industrial Conglomerates
+    valuation: [ev_ebitda, p_pe_trailing]
+    quality: [roic_3y_med, operating_margin_3y_med, fcf_margin_3y_med]
+    growth: [revenue_growth_3yr, ebitda_trend_5y]
+    sentiment: [price_mom_12_1]
+    weights: {V: 0.30, Q: 0.30, G: 0.25, S: 0.15}
+
+  "201060": &industrials_machinery  # Machinery
+    valuation: [ev_ebitda, p_pe_trailing, fcf_yield]
+    quality: [roic_3y_med, operating_margin_3y_med, fcf_margin_3y_med]
+    growth: [book_to_bill, revenue_growth_3yr, ebitda_trend_5y]
+    sentiment: [eps_revision_90d, price_mom_12_1]
+    weights: {V: 0.30, Q: 0.30, G: 0.25, S: 0.15}
+
+  "201070": &industrials_distrib  # Trading Companies & Distributors
+    valuation: [ev_ebitda, p_pe_trailing]
+    quality: [roic_3y_med, operating_margin_3y_med]
+    growth: [revenue_growth_3yr, revenue_trend_5y]
+    sentiment: [price_mom_12_1]
+    weights: {V: 0.30, Q: 0.30, G: 0.25, S: 0.15}
+
+  "202010": &industrials_commercial  # Commercial Services & Supplies
+    valuation: [fcf_yield, ev_ebitda, p_pe_trailing]
+    quality: [roic_3y_med, operating_margin_3y_med, stability]
+    growth: [revenue_growth_3yr, revenue_trend_5y]
+    sentiment: [eps_revision_90d, price_mom_12_1]
+    weights: {V: 0.30, Q: 0.30, G: 0.25, S: 0.15}
+
+  "202020": &industrials_professional  # Professional Services
+    valuation: [p_pe_trailing, fcf_yield]
+    quality: [operating_margin_3y_med, roic_3y_med, fcf_margin_3y_med]
+    growth: [revenue_growth_3yr, revenue_trend_5y]
+    sentiment: [eps_revision_90d, price_mom_12_1]
+    weights: {V: 0.30, Q: 0.30, G: 0.25, S: 0.15}
+
+  "203010": &industrials_freight  # Air Freight & Logistics
+    valuation: [ev_ebitda, p_pe_trailing, fcf_yield]
+    quality: [roic_3y_med, operating_margin_3y_med, fcf_margin_3y_med]
+    growth: [revenue_growth_3yr, ebitda_trend_5y]
+    sentiment: [price_mom_12_1, eps_revision_90d]
+    weights: {V: 0.30, Q: 0.30, G: 0.25, S: 0.15}
+
+  "203020": &industrials_airlines  # Passenger Airlines
+    valuation: [ev_ebitda, p_pe_trailing]
+    quality: [operating_margin_3y_med, low_leverage, fcf_margin_3y_med]
+    growth: [revenue_growth_3yr, ebitda_trend_5y]
+    sentiment: [price_mom_12_1, eps_revision_90d]
+    weights: {V: 0.30, Q: 0.30, G: 0.20, S: 0.20}
+
+  "203030": &industrials_marine  # Marine Transportation
+    valuation: [ev_ebitda, p_pe_trailing, p_book]
+    quality: [roic_3y_med, low_leverage]
+    growth: [revenue_growth_3yr]
+    sentiment: [price_mom_12_1]
+    weights: {V: 0.35, Q: 0.25, G: 0.20, S: 0.20}
+
+  "203040": &industrials_ground  # Ground Transportation
+    valuation: [ev_ebitda, p_pe_trailing, fcf_yield]
+    quality: [roic_3y_med, operating_margin_3y_med, fcf_margin_3y_med]
+    growth: [revenue_growth_3yr, ebitda_trend_5y]
+    sentiment: [eps_revision_90d, price_mom_12_1]
+    weights: {V: 0.30, Q: 0.30, G: 0.25, S: 0.15}
+
+  "203050": &industrials_infra  # Transportation Infrastructure
+    valuation: [ev_ebitda, fcf_yield]
+    quality: [roic_3y_med, fcf_margin_3y_med]
+    growth: [revenue_growth_3yr]
+    sentiment: [price_mom_12_1]
+    weights: {V: 0.30, Q: 0.30, G: 0.25, S: 0.15}
+
+  # ============= CONSUMER DISCRETIONARY (GICS 2510-2550) =============
+  "251010": &discretionary_auto_parts  # Automobile Components
+    valuation: [ev_ebitda, p_pe_trailing]
+    quality: [roic_3y_med, operating_margin_3y_med, low_leverage]
+    growth: [revenue_growth_3yr, ebitda_trend_5y]
+    sentiment: [eps_revision_90d, price_mom_12_1]
+    weights: {V: 0.25, Q: 0.25, G: 0.30, S: 0.20}
+
+  "251020": &discretionary_autos  # Automobiles
+    valuation: [ev_ebitda, p_pe_trailing, p_book]
+    quality: [roic_3y_med, operating_margin_3y_med, low_leverage]
+    growth: [revenue_growth_3yr, ebitda_trend_5y, ev_mix_growth]
+    sentiment: [eps_revision_90d, price_mom_12_1]
+    weights: {V: 0.25, Q: 0.25, G: 0.30, S: 0.20}
+    hard_exclude:
+      debt_ebitda: {op: ">", value: 3.0}
+
+  "252010": &discretionary_home  # Household Durables
+    valuation: [ev_ebitda, p_pe_trailing, p_book]
+    quality: [roic_3y_med, operating_margin_3y_med]
+    growth: [revenue_growth_3yr, revenue_trend_5y]
+    sentiment: [eps_revision_90d, price_mom_12_1]
+    weights: {V: 0.25, Q: 0.25, G: 0.30, S: 0.20}
+
+  "252020": &discretionary_leisure  # Leisure Products
+    valuation: [ev_ebitda, p_pe_trailing]
+    quality: [roic_3y_med, gross_margin]
+    growth: [revenue_growth_3yr]
+    sentiment: [price_mom_12_1]
+    weights: {V: 0.25, Q: 0.25, G: 0.30, S: 0.20}
+
+  "252030": &discretionary_apparel  # Textiles, Apparel & Luxury Goods
+    valuation: [p_pe_trailing, ev_ebitda]
+    quality: [roic_3y_med, gross_margin, operating_margin_3y_med]
+    growth: [revenue_growth_3yr, revenue_trend_5y]
+    sentiment: [eps_revision_90d, price_mom_12_1]
+    weights: {V: 0.25, Q: 0.25, G: 0.30, S: 0.20}
+
+  "253010": &discretionary_hotels  # Hotels, Restaurants & Leisure
+    valuation: [ev_ebitda, p_pe_trailing]
+    quality: [roic_3y_med, operating_margin_3y_med, fcf_margin_3y_med]
+    growth: [revenue_growth_3yr, ebitda_trend_5y]
+    sentiment: [eps_revision_90d, price_mom_12_1]
+    weights: {V: 0.25, Q: 0.25, G: 0.30, S: 0.20}
+
+  "253020": &discretionary_services  # Diversified Consumer Services
+    valuation: [p_pe_trailing, fcf_yield]
+    quality: [roic_3y_med, operating_margin_3y_med]
+    growth: [revenue_growth_3yr, revenue_trend_5y]
+    sentiment: [price_mom_12_1]
+    weights: {V: 0.25, Q: 0.25, G: 0.30, S: 0.20}
+
+  "255010": &discretionary_distrib  # Distributors
+    valuation: [ev_ebitda, p_pe_trailing]
+    quality: [roic_3y_med, operating_margin_3y_med]
+    growth: [revenue_growth_3yr]
+    sentiment: [price_mom_12_1]
+    weights: {V: 0.25, Q: 0.25, G: 0.30, S: 0.20}
+
+  "255020": &discretionary_internet  # Internet & Direct Marketing Retail
+    valuation: [ev_sales, fcf_yield]
+    quality: [gross_margin, fcf_margin_3y_med, operating_margin_3y_med]
+    growth: [revenue_growth_3yr, revenue_trend_5y]
+    sentiment: [eps_revision_90d, price_mom_12_1]
+    weights: {V: 0.20, Q: 0.25, G: 0.35, S: 0.20}
+
+  "255030": &discretionary_broadline  # Broadline Retail
+    valuation: [p_pe_trailing, fcf_yield, ev_ebitda]
+    quality: [roic_3y_med, gross_margin, operating_margin_3y_med]
+    growth: [revenue_growth_3yr, ebitda_trend_5y]
+    sentiment: [eps_revision_90d, price_mom_12_1]
+    weights: {V: 0.25, Q: 0.25, G: 0.30, S: 0.20}
+
+  "255040": &discretionary_retail  # Specialty Retail
+    valuation: [p_pe_trailing, ev_ebitda, fcf_yield]
+    quality: [roic_3y_med, operating_margin_3y_med, inventory_turns]
+    growth: [revenue_growth_3yr, sss_growth, ebitda_trend_5y]
+    sentiment: [eps_revision_90d, price_mom_12_1]
+    weights: {V: 0.25, Q: 0.25, G: 0.30, S: 0.20}
+
+  # ============= CONSUMER STAPLES (GICS 3010-3030) =============
+  "301010": &staples_retail  # Consumer Staples Distribution & Retail
+    valuation: [p_pe_trailing, fcf_yield, ev_ebitda]
+    quality: [roic_3y_med, gross_margin, operating_margin_3y_med]
+    growth: [revenue_growth_3yr, sss_growth, ebitda_trend_5y]
+    sentiment: [eps_revision_90d, price_mom_12_1]
+    weights: {V: 0.35, Q: 0.35, G: 0.15, S: 0.15}
+
+  "302010": &staples_beverages  # Beverages
+    valuation: [p_pe_trailing, fcf_yield, ev_ebitda]
+    quality: [roic_3y_med, gross_margin, operating_margin_3y_med, stability]
+    growth: [revenue_growth_3yr, organic_growth, ebitda_trend_5y]
+    sentiment: [eps_revision_90d, price_mom_12_1]
+    weights: {V: 0.35, Q: 0.35, G: 0.15, S: 0.15}
+    hard_exclude:
+      organic_growth: {op: "<", value: -0.02}
+
+  "302020": &staples_food  # Food Products
+    valuation: [p_pe_trailing, ev_ebitda, fcf_yield]
+    quality: [roic_3y_med, gross_margin, operating_margin_3y_med]
+    growth: [revenue_growth_3yr, organic_growth, revenue_trend_5y]
+    sentiment: [eps_revision_90d, price_mom_12_1]
+    weights: {V: 0.35, Q: 0.35, G: 0.15, S: 0.15}
+    hard_exclude:
+      organic_growth: {op: "<", value: -0.05}
+
+  "302030": &staples_tobacco  # Tobacco
+    valuation: [fcf_yield, p_pe_trailing, ev_ebitda]
+    quality: [fcf_margin_3y_med, operating_margin_3y_med, stability]
+    growth: [revenue_growth_3yr]
+    sentiment: [price_mom_12_1]
+    weights: {V: 0.35, Q: 0.35, G: 0.15, S: 0.15}
+
+  "303010": &staples_household  # Household Products
+    valuation: [p_pe_trailing, ev_ebitda, fcf_yield]
+    quality: [roic_3y_med, gross_margin, operating_margin_3y_med]
+    growth: [revenue_growth_3yr, organic_growth, ebitda_trend_5y]
+    sentiment: [eps_revision_90d, price_mom_12_1]
+    weights: {V: 0.35, Q: 0.35, G: 0.15, S: 0.15}
+
+  "303020": &staples_personal_care  # Personal Care Products
+    valuation: [p_pe_trailing, ev_ebitda, fcf_yield]
+    quality: [roic_3y_med, gross_margin, operating_margin_3y_med]
+    growth: [revenue_growth_3yr, organic_growth, ebitda_trend_5y]
+    sentiment: [eps_revision_90d, price_mom_12_1]
+    weights: {V: 0.35, Q: 0.35, G: 0.15, S: 0.15}
+
+  # ============= HEALTH CARE (GICS 3510-3520) =============
+  "351010": &healthcare_equipment  # Health Care Equipment & Supplies
+    valuation: [p_pe_trailing, ev_ebitda, fcf_yield]
+    quality: [roic_3y_med, gross_margin, operating_margin_3y_med]
+    growth: [revenue_growth_3yr, organic_growth, ebitda_trend_5y]
+    sentiment: [eps_revision_90d, price_mom_12_1]
+    # Quantum §Stage 2.4 MI: V<->Q nMI=+0.70 in healthcare. Q -0.10, G/S +0.05.
+    weights: {V: 0.30, Q: 0.20, G: 0.30, S: 0.20}
+    hard_exclude:
+      gross_margin: {op: "<", value: 0.40}
+
+  "351020": &healthcare_services  # Health Care Providers & Services
+    valuation: [p_pe_trailing, ev_ebitda]
+    quality: [roic_3y_med, operating_margin_3y_med, low_leverage]
+    growth: [revenue_growth_3yr, ebitda_trend_5y]
+    sentiment: [eps_revision_90d, price_mom_12_1]
+    # Quantum §Stage 2.4 MI: V<->Q nMI=+0.70 in healthcare. Q -0.10, G/S +0.05.
+    weights: {V: 0.30, Q: 0.20, G: 0.30, S: 0.20}
+
+  "351030": &healthcare_tech  # Health Care Technology
+    valuation: [ev_sales, fcf_yield]
+    quality: [gross_margin, operating_margin_3y_med, roic_3y_med]
+    growth: [revenue_growth_3yr, revenue_trend_5y]
+    sentiment: [eps_revision_90d, price_mom_12_1]
+    weights: {V: 0.25, Q: 0.30, G: 0.30, S: 0.15}
+
+  "352010": &healthcare_biotech  # Biotechnology
+    valuation: [ev_sales, ev_cash, p_tbv]
+    quality: [cash_runway, gross_margin, rnd_efficiency]
+    growth: [revenue_growth_3yr, pipeline_progress]
+    sentiment: [eps_revision_90d, price_mom_12_1, distance_from_52w_high]
+    weights: {V: 0.10, Q: 0.20, G: 0.50, S: 0.20}
+    hard_exclude:
+      cash_runway: {op: "<", value: 12}
+
+  "352020": &healthcare_pharma  # Pharmaceuticals
+    valuation: [p_pe_trailing, ev_ebitda, pipeline_npv]
+    quality: [roic_3y_med, gross_margin, operating_margin_3y_med, rnd_efficiency]
+    growth: [revenue_growth_3yr, pipeline_progress, ebitda_trend_5y]
+    sentiment: [eps_revision_90d, price_mom_12_1]
+    # Quantum §Stage 2.4 MI: V<->Q nMI=+0.70 in healthcare. Q -0.10, G/S +0.05.
+    weights: {V: 0.30, Q: 0.20, G: 0.30, S: 0.20}
+
+  "352030": &healthcare_life_sci  # Life Sciences Tools & Services
+    valuation: [ev_ebitda, p_pe_trailing, fcf_yield]
+    quality: [roic_3y_med, gross_margin, operating_margin_3y_med]
+    growth: [revenue_growth_3yr, organic_growth, ebitda_trend_5y]
+    sentiment: [eps_revision_90d, price_mom_12_1]
+    # Quantum §Stage 2.4 MI: V<->Q nMI=+0.70 in healthcare. Q -0.10, G/S +0.05.
+    weights: {V: 0.30, Q: 0.20, G: 0.30, S: 0.20}
+
+  # ============= FINANCIALS (GICS 4010-4030) =============
+  "401010": &financials_banks  # Banks
+    valuation: [p_tbv, p_pe_forward]
+    quality: [rotce, cet1_ratio, efficiency_ratio_inv, npl_coverage]
+    growth: [tbv_per_share_5y_cagr, loan_growth]
+    sentiment: [eps_revision_90d, price_mom_12_1]
+    weights: {V: 0.40, Q: 0.35, G: 0.15, S: 0.10}
+    hard_exclude:
+      cet1_ratio: {op: "<", value: 0.07}
+      npl_coverage: {op: "<", value: 1.0}
+
+  "402010": &financials_diversified  # Financial Services
+    valuation: [p_pe_trailing, p_book]
+    quality: [roe, roic_3y_med, operating_margin_3y_med]
+    growth: [revenue_growth_3yr, ebitda_trend_5y]
+    sentiment: [eps_revision_90d, price_mom_12_1]
+    weights: {V: 0.30, Q: 0.30, G: 0.25, S: 0.15}
+
+  "402020": &financials_consumer_fin  # Consumer Finance
+    valuation: [p_pe_trailing, p_book]
+    quality: [roe, npl_coverage, efficiency_ratio_inv]
+    growth: [loan_growth, revenue_growth_3yr]
+    sentiment: [eps_revision_90d, price_mom_12_1]
+    weights: {V: 0.35, Q: 0.30, G: 0.20, S: 0.15}
+
+  "402030": &financials_capital_mkts  # Capital Markets
+    valuation: [p_pe_trailing, p_book, fcf_yield]
+    quality: [roe, roic_3y_med, operating_margin_3y_med]
+    growth: [revenue_growth_3yr, aum_growth, ebitda_trend_5y]
+    sentiment: [eps_revision_90d, price_mom_12_1]
+    weights: {V: 0.25, Q: 0.30, G: 0.30, S: 0.15}
+
+  "402040": &financials_reits  # Mortgage REITs
+    valuation: [p_book, p_pe_trailing]
+    quality: [roe, dividend_coverage]
+    growth: [book_value_growth]
+    sentiment: [price_mom_12_1]
+    weights: {V: 0.35, Q: 0.30, G: 0.20, S: 0.15}
+
+  "403010": &financials_insurance  # Insurance
+    valuation: [p_book, p_pe_trailing]
+    quality: [combined_ratio_inv, roe, fcf_margin_3y_med]
+    growth: [book_value_growth, revenue_growth_3yr]
+    sentiment: [eps_revision_90d, price_mom_12_1]
+    weights: {V: 0.35, Q: 0.40, G: 0.15, S: 0.10}
+    hard_exclude:
+      combined_ratio_inv: {op: "<", value: 1.0}
+
+  # ============= INFORMATION TECHNOLOGY (GICS 4510-4530) =============
+  "451020": &tech_services  # IT Services
+    valuation: [p_pe_trailing, ev_ebitda, fcf_yield]
+    quality: [operating_margin_3y_med, roic_3y_med, fcf_margin_3y_med]
+    growth: [revenue_growth_3yr, ebitda_trend_5y, organic_revenue_growth]
+    sentiment: [eps_revision_90d, price_mom_12_1]
+    weights: {V: 0.30, Q: 0.30, G: 0.25, S: 0.15}
+
+  "451030": &tech_software  # Software
+    valuation: [ev_sales, fcf_yield, ev_ebitda, p_pe_trailing]
+    quality: [gross_margin, rule_of_40, fcf_margin_3y_med, nrr]
+    growth: [arr_growth, revenue_growth_3yr, nrr]
+    sentiment: [eps_revision_90d, price_mom_12_1, return_6m]
+    weights: {V: 0.15, Q: 0.25, G: 0.45, S: 0.15}
+    hard_exclude:
+      gross_margin: {op: "<", value: 0.60}
+
+  "452010": &tech_comm_equip  # Communications Equipment
+    valuation: [ev_ebitda, p_pe_trailing, fcf_yield]
+    quality: [roic_3y_med, gross_margin, operating_margin_3y_med]
+    growth: [revenue_growth_3yr, ebitda_trend_5y]
+    sentiment: [eps_revision_90d, price_mom_12_1]
+    weights: {V: 0.30, Q: 0.30, G: 0.25, S: 0.15}
+
+  "452020": &tech_hardware  # Technology Hardware, Storage & Peripherals
+    valuation: [p_pe_trailing, ev_ebitda, fcf_yield]
+    quality: [roic_3y_med, gross_margin, operating_margin_3y_med]
+    growth: [revenue_growth_3yr, ebitda_trend_5y, services_mix_growth]
+    sentiment: [eps_revision_90d, price_mom_12_1]
+    weights: {V: 0.30, Q: 0.30, G: 0.25, S: 0.15}
+
+  "452030": &tech_electronics  # Electronic Equipment, Instruments & Components
+    valuation: [ev_ebitda, p_pe_trailing, fcf_yield]
+    quality: [roic_3y_med, gross_margin, operating_margin_3y_med]
+    growth: [revenue_growth_3yr, ebitda_trend_5y]
+    sentiment: [eps_revision_90d, price_mom_12_1]
+    weights: {V: 0.30, Q: 0.30, G: 0.25, S: 0.15}
+
+  "453010": &tech_semis  # Semiconductors & Semiconductor Equipment
+    valuation: [p_pe_trailing, ev_ebitda, fcf_yield]
+    quality: [gross_margin, roic_3y_med, operating_margin_3y_med]
+    growth: [revenue_growth_3yr, ebitda_trend_5y, book_to_bill]
+    sentiment: [eps_revision_90d, price_mom_12_1, return_6m]
+    weights: {V: 0.25, Q: 0.25, G: 0.30, S: 0.20}
+    hard_exclude:
+      gross_margin: {op: "<", value: 0.30}
+
+  # ============= COMMUNICATION SERVICES (GICS 5010-5020) =============
+  "501010": &comms_telecom  # Diversified Telecommunication Services
+    valuation: [ev_ebitda, fcf_yield, p_pe_trailing]
+    quality: [fcf_margin_3y_med, stability, low_leverage]
+    growth: [revenue_growth_3yr, sub_net_adds, ebitda_trend_5y]
+    sentiment: [eps_revision_90d, price_mom_12_1]
+    weights: {V: 0.30, Q: 0.30, G: 0.25, S: 0.15}
+    hard_exclude:
+      debt_ebitda: {op: ">", value: 3.5}
+
+  "501020": &comms_wireless  # Wireless Telecommunication Services
+    valuation: [ev_ebitda, fcf_yield]
+    quality: [fcf_margin_3y_med, operating_margin_3y_med, stability]
+    growth: [revenue_growth_3yr, sub_net_adds]
+    sentiment: [eps_revision_90d, price_mom_12_1]
+    weights: {V: 0.30, Q: 0.30, G: 0.25, S: 0.15}
+
+  "502010": &comms_media  # Media
+    valuation: [ev_ebitda, p_pe_trailing, fcf_yield]
+    quality: [operating_margin_3y_med, roic_3y_med, fcf_margin_3y_med]
+    growth: [revenue_growth_3yr, ebitda_trend_5y, user_growth]
+    sentiment: [eps_revision_90d, price_mom_12_1]
+    weights: {V: 0.25, Q: 0.30, G: 0.30, S: 0.15}
+
+  "502020": &comms_entertainment  # Entertainment
+    valuation: [ev_ebitda, p_pe_trailing, ev_sales]
+    quality: [operating_margin_3y_med, roic_3y_med, gross_margin]
+    growth: [subscriber_growth, revenue_growth_3yr, content_roi]
+    sentiment: [eps_revision_90d, price_mom_12_1]
+    weights: {V: 0.25, Q: 0.30, G: 0.30, S: 0.15}
+
+  "502030": &comms_interactive  # Interactive Media & Services
+    valuation: [p_pe_trailing, ev_ebitda, fcf_yield]
+    quality: [operating_margin_3y_med, roic_3y_med, gross_margin]
+    growth: [revenue_growth_3yr, user_growth, dau_mau]
+    sentiment: [eps_revision_90d, price_mom_12_1]
+    weights: {V: 0.25, Q: 0.30, G: 0.30, S: 0.15}
+
+  # ============= UTILITIES (GICS 5510) =============
+  "551010": &utilities_electric  # Electric Utilities
+    valuation: [p_pe_trailing, p_book, dividend_yield_inv]
+    quality: [allowed_roe, rate_base_growth, stability]
+    growth: [eps_growth_5y, revenue_growth_3yr]
+    sentiment: [price_mom_12_1]
+    weights: {V: 0.35, Q: 0.35, G: 0.20, S: 0.10}
+
+  "551020": &utilities_gas  # Gas Utilities
+    valuation: [ev_ebitda, p_pe_trailing, dividend_yield_inv]
+    quality: [roic_3y_med, stability, rate_base_growth]
+    growth: [eps_growth_5y, revenue_growth_3yr]
+    sentiment: [price_mom_12_1]
+    weights: {V: 0.35, Q: 0.35, G: 0.20, S: 0.10}
+
+  "551030": &utilities_multi  # Multi-Utilities
+    valuation: [p_pe_trailing, p_book, dividend_yield_inv]
+    quality: [roic_3y_med, stability, rate_base_growth]
+    growth: [eps_growth_5y, revenue_growth_3yr]
+    sentiment: [price_mom_12_1]
+    weights: {V: 0.35, Q: 0.35, G: 0.20, S: 0.10}
+
+  "551040": &utilities_water  # Water Utilities
+    valuation: [p_pe_trailing, ev_ebitda, dividend_yield_inv]
+    quality: [roic_3y_med, stability, rate_base_growth]
+    growth: [eps_growth_5y, revenue_growth_3yr]
+    sentiment: [price_mom_12_1]
+    weights: {V: 0.35, Q: 0.35, G: 0.20, S: 0.10}
+
+  "551050": &utilities_ipp  # Independent Power and Renewable Electricity Producers
+    valuation: [ev_ebitda, p_pe_trailing, fcf_yield]
+    quality: [roce_3y, fcf_margin_3y_med, debt_ebitda_inv]
+    growth: [capacity_growth, revenue_growth_3yr]
+    sentiment: [price_mom_12_1, eps_revision_90d]
+    weights: {V: 0.35, Q: 0.35, G: 0.20, S: 0.10}
+
+  # ============= REAL ESTATE (GICS 6010-6020) =============
+  "601010": &reits  # Equity REITs
+    valuation: [p_ffo, p_affo, premium_to_nav]
+    quality: [affo_payout_ratio_inv, debt_ebitda_inv, occupancy]
+    growth: [same_store_noi_growth, affo_per_share_5y_cagr]
+    sentiment: [ffo_revision_90d, price_mom_12_1]
+    weights: {V: 0.35, Q: 0.30, G: 0.25, S: 0.10}
+    hard_exclude:
+      affo_payout_ratio_inv: {op: "<", value: 0.05}
+
+  "602010": &real_estate_services  # Real Estate Management & Development
+    valuation: [p_pe_trailing, p_book]
+    quality: [roic_3y_med, operating_margin_3y_med, low_leverage]
+    growth: [revenue_growth_3yr, ebitda_trend_5y]
+    sentiment: [eps_revision_90d, price_mom_12_1]
+    weights: {V: 0.35, Q: 0.30, G: 0.25, S: 0.10}
