@@ -47,10 +47,15 @@ def latest_audit(audit_dir):
     return cands[-1]
 
 
-def load_audit_factor_ics(audit_path):
+def load_audit_factor_ics(audit_path, exclude_period=None):
     """Return dict {factor_key: [(t, ic), ...]} from audit JSON."""
     data = json.loads(Path(audit_path).read_text())
     results = data.get('results', [])
+    if exclude_period:
+        results = [r for r in results
+                   if exclude_period not in str(r.get('label', ''))]
+        print(f'  Excluded periods containing {exclude_period!r}; '
+              f'{len(results)} remain')
     out = {v: [] for v in FACTOR_KEY.values()}
     for t_idx, period in enumerate(results):
         fic = period.get('factor_ics', {}) or {}
@@ -75,12 +80,14 @@ def main():
                     help='Directory to scan for latest audit JSON')
     ap.add_argument('--out', default=str(ROOT / 'data' / 'factor_decay.json'),
                     help='Output path for decay calibration')
+    ap.add_argument('--exclude-period', help='Exclude periods whose label '
+                    'contains this string (for OOS-clean calibration).')
     args = ap.parse_args()
 
     audit_path = Path(args.audit) if args.audit else latest_audit(args.audit_dir)
     print(f'Reading audit: {audit_path}')
 
-    fic_series, n_periods = load_audit_factor_ics(audit_path)
+    fic_series, n_periods = load_audit_factor_ics(audit_path, args.exclude_period)
     print(f'  {n_periods} periods')
 
     factors_out = {}

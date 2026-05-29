@@ -629,9 +629,13 @@ def run_one_period(cutoff_str, forward_str, t10y, ism, curve_10y2y, core_cpi_yoy
                 vol_hrp = float(hrp_port_ret.std())
                 vol_red_pct = ((vol_ew - vol_hrp) / vol_ew * 100.0) if vol_ew > 0 else 0.0
                 max_w = float(w_aligned.max())
+                top5_hrp_weight = float(w_aligned.nlargest(5).sum())
+                ew_equiv = 5.0 / len(w_aligned)
                 print(f'\n  HRP top-decile (Stage 1.2, n={len(w_aligned)}):  '
                       f'fwd={hrp_fwd:>+7.2%}  dd={hrp_dd:.2%}  Calmar={hrp_calmar:.2f}  '
                       f'max_w={max_w:.1%}')
+                print(f'  HRP top-5 weight share: {top5_hrp_weight:.1%}  '
+                      f'(equal-weight equivalent: {ew_equiv:.1%})')
                 print(f'  Equal-weight (same names):       '
                       f'fwd={ew_fwd:>+7.2%}  dd={ew_dd:.2%}  '
                       f'vol_reduction={vol_red_pct:+.1f}%')
@@ -639,6 +643,7 @@ def run_one_period(cutoff_str, forward_str, t10y, ism, curve_10y2y, core_cpi_yoy
                     'hrp_fwd': hrp_fwd, 'hrp_dd': hrp_dd, 'hrp_calmar': hrp_calmar,
                     'ew_fwd': ew_fwd, 'ew_dd': ew_dd, 'vol_reduction_pct': vol_red_pct,
                     'n_hrp': len(w_aligned), 'max_weight': max_w,
+                    'top5_weight': top5_hrp_weight, 'ew_equiv': ew_equiv,
                 }
             else:
                 print(f'\n  HRP top-decile: insufficient cov data '
@@ -663,7 +668,8 @@ def run_one_period(cutoff_str, forward_str, t10y, ism, curve_10y2y, core_cpi_yoy
     sn_bot_pieces = []
     for sg in scored['sector_group'].dropna().unique():
         sub = scored[scored['sector_group'] == sg]
-        if len(sub) < 20:
+        if len(sub) < 30:
+            print(f'    Skipping {sg} from sector-neutral (n={len(sub)} < 30)')
             continue
         n_decile = max(2, len(sub) // 10)
         sn_top_pieces.append(sub.nlargest(n_decile, 'potential_score'))
@@ -1108,6 +1114,18 @@ def main():
                 'fwd_return', 'fwd_return_net', 'decile', 'regime_label']
                 if c in s.columns]
             s[cols].to_csv(period_file, index=False)
+
+        # Persist the held-out OOS scored frame (excluded from all_scored_list)
+        # so post-hoc diagnostics can run without re-executing the backtest.
+        if oos_result is not None and oos_scored is not None and oos_result['n'] > 0:
+            safe = safe_label(oos_result['label'])
+            oos_file = audit_path / f'scored_OOS_{safe}_{run_id}.csv'
+            cols = [c for c in ['ticker', 'sector_group', 'potential_score',
+                'valuation_score', 'quality_score', 'growth_score', 'sentiment_score',
+                'fwd_return', 'fwd_return_net', 'decile', 'regime_label']
+                if c in oos_scored.columns]
+            oos_scored[cols].to_csv(oos_file, index=False)
+            print(f'  OOS scored frame saved to {oos_file}')
 
         meta = {
             'run_id': run_id,
