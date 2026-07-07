@@ -6,9 +6,15 @@ Usage:
   python scripts/analyze_oos.py --csv data/audit/scored_OOS_<label>_oos_2024_locked.csv
 """
 import argparse
+import sqlite3
 from pathlib import Path
 import pandas as pd
 import numpy as np
+
+# SimFin free-tier daily prices stop advancing past this date. Quarters ending
+# after this ceiling load prices from prices_live (yfinance) in
+# data/stock_cache.db. See docs/price_layer.md.
+SIMFIN_PRICE_CEILING = pd.Timestamp('2025-06-03')
 
 
 def quarterly_decomposition(df, cutoff='2023-12-31', forward='2024-12-31'):
@@ -33,7 +39,36 @@ def quarterly_decomposition(df, cutoff='2023-12-31', forward='2024-12-31'):
 
     sp_dates = sp.index.get_level_values('Date')
 
+    _live_conn_holder = {'conn': None, 'announced': False}
+
+    def _prices_live_asof(ts):
+        if _live_conn_holder['conn'] is None:
+            db_path = ROOT / 'data' / 'stock_cache.db'
+            _live_conn_holder['conn'] = sqlite3.connect(str(db_path))
+        if not _live_conn_holder['announced']:
+            print()
+            print('*' * 64)
+            print('  ANALYZE_OOS forward-price source: yfinance (prices_live)')
+            print(f'  Quarter end > SIMFIN_PRICE_CEILING '
+                  f'({SIMFIN_PRICE_CEILING.date()}) triggers fallback.')
+            print('  See docs/price_layer.md.')
+            print('*' * 64)
+            _live_conn_holder['announced'] = True
+        lo = (ts - pd.Timedelta(days=10)).strftime('%Y-%m-%d')
+        hi = ts.strftime('%Y-%m-%d')
+        df = pd.read_sql_query(
+            "SELECT ticker, date, close FROM prices_live "
+            f"WHERE date > '{lo}' AND date <= '{hi}' ORDER BY ticker, date",
+            _live_conn_holder['conn'],
+        )
+        if df.empty:
+            return pd.Series(dtype=float)
+        return (df.sort_values(['ticker', 'date'])
+                  .groupby('ticker')['close'].last())
+
     def price_asof(ts):
+        if ts > SIMFIN_PRICE_CEILING:
+            return _prices_live_asof(ts)
         window = sp[(sp_dates > ts - pd.Timedelta(days=10)) & (sp_dates <= ts)]
         if window.empty:
             return pd.Series(dtype=float)

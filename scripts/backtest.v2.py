@@ -37,6 +37,14 @@ import market_screener as ms
 # ms2.classify_regime, ms2.apply_probabilistic_overlay, etc.) continue to work.
 ms2 = ms
 
+# Free-tier SimFin us-shareprices-daily stopped advancing past this date. Forward-price
+# EVALUATION for periods whose forward window extends past this ceiling falls back to
+# yfinance (prices_live in data/stock_cache.db). Scoring at the cutoff date still uses
+# SimFin exclusively — sources NEVER mix within scoring. See docs/price_layer.md and
+# docs/phase5_oos_2025_decision.md (pre-registered "allowed change during freeze",
+# same convention as the --oos-reserve fix in docs/phase3_oos_decision.md).
+SIMFIN_PRICE_CEILING = '2025-06-03'
+
 SURVIVORSHIP_WARNING = """
 ########################################################################
 #                                                                      #
@@ -67,6 +75,15 @@ PERIODS = [
     ('2022-12-31', '2023-12-31', 0.0388, 49.0, -0.60, 0.065, 450),   # 2023 full year
     ('2023-06-30', '2024-06-30', 0.0375, 46.0, -0.95, 0.030, 410),   # 2023 H2
     ('2023-12-31', '2024-12-31', 0.0388, 47.0, -0.40, 0.039, 380),   # 2024 full year
+    # 2025 full year — pre-registered per docs/phase5_oos_2025_decision.md.
+    # Forward year 2025 exceeds SIMFIN_PRICE_CEILING; forward prices sourced from
+    # prices_live (yfinance). Fill state vars before locked run:
+    #   t10y         = FRED DGS10, close on 2024-12-31 (decimal, not %).
+    #   ism          = ISM Manufacturing PMI, Dec-2024 print (ismworld.org / Haver).
+    #   curve_10y2y  = FRED T10Y2Y, close on 2024-12-31.
+    #   core_cpi_yoy = FRED CPILFESL YoY %, Dec-2024 print (decimal).
+    #   hy_oas       = FRED BAMLH0A0HYM2 (ICE BofA US HY OAS), 2024-12-31 close (bps).
+    ('2024-12-31', '2025-12-31', None, None, None, None, None),      # 2025 full year (OOS)
 ]
 
 
@@ -437,8 +454,106 @@ def run_one_period(cutoff_str, forward_str, t10y, ism, curve_10y2y, core_cpi_yoy
         }, None
 
     # ----- Forward returns -----
+    # Cutoff price ALWAYS comes from SimFin (frozen scoring invariant).
+    # Forward price comes from SimFin except when forward_str extends past
+    # SIMFIN_PRICE_CEILING; those periods draw p_fwd from prices_live (yfinance,
+    # data/stock_cache.db). yfinance close is auto-adjusted (split+dividend),
+    # matching SimFin 'Adj. Close' semantics per docs/price_layer.md — no
+    # rescaling. Forward-return EVALUATION is not scoring; sources never mix
+    # within the scoring pipeline.
     price_at_adj = sp_at.sort_index().groupby(level=0).last()['Adj. Close'].rename('p_at_adj')
-    price_fwd = sp_forward.sort_index().groupby(level=0).last()['Adj. Close'].rename('p_fwd')
+
+    if forward_str > SIMFIN_PRICE_CEILING:
+        cutoff_universe = set(price_at_adj.index)
+        db_path = ROOT / 'data' / 'stock_cache.db'
+        window_lo = (pd.Timestamp(forward_str) - pd.Timedelta(days=10)).strftime('%Y-%m-%d')
+        with sqlite3.connect(str(db_path)) as _conn:
+            try:
+                live_fwd = pd.read_sql_query(
+                    "SELECT ticker, date, close FROM prices_live "
+                    f"WHERE date > '{window_lo}' AND date <= '{forward_str}' "
+                    "ORDER BY ticker, date",
+                    _conn,
+                )
+            except Exception as e:
+                sys.exit(
+                    f'ERROR: prices_live table unavailable ({e}). '
+                    f'Run scripts/refreshprice.py before running periods with forward > '
+                    f'{SIMFIN_PRICE_CEILING} (see docs/price_layer.md).'
+                )
+        if live_fwd.empty:
+            sys.exit(
+                f'ERROR: prices_live returned zero rows in ({window_lo}, {forward_str}]. '
+                f'Refresh prices_live before running this OOS period.'
+            )
+        # Last close within 10d at/before forward date per ticker.
+        price_fwd_yf = (
+            live_fwd.sort_values(['ticker', 'date'])
+                    .groupby('ticker')['close']
+                    .last()
+                    .rename('p_fwd')
+        )
+        price_fwd_yf.index.name = 'Ticker'
+        n_live = len(price_fwd_yf)
+        print()
+        print('*' * 72)
+        print('  FORWARD-PRICE SOURCE: yfinance (prices_live)  <-- SimFin ceiling exceeded')
+        print(f'  forward = {forward_str} > SIMFIN_PRICE_CEILING = {SIMFIN_PRICE_CEILING}')
+        print(f'  cutoff price source: SimFin (unchanged)')
+        print(f'  yfinance-priced tickers: {n_live} / {len(cutoff_universe)} in cutoff universe')
+        print('  See docs/price_layer.md and docs/phase5_oos_2025_decision.md.')
+        print('*' * 72)
+
+        # --- Cross-source splice check ---
+        # yfinance back-adjusts the entire series when a ticker splits between
+        # 2024-12-31 and the fetch date, while the SimFin cutoff price is
+        # adjusted only through SIMFIN_PRICE_CEILING. Detect gross mismatches
+        # by comparing yfinance and SimFin closes on SIMFIN_PRICE_CEILING ± 5d
+        # and EXCLUDE any ticker whose ratio deviates from 1.0 by > 5%.
+        splice_ts = pd.Timestamp(SIMFIN_PRICE_CEILING)
+        splice_lo = splice_ts - pd.Timedelta(days=5)
+        splice_hi = splice_ts + pd.Timedelta(days=5)
+        sp_full_dates = sp.index.get_level_values('Date')
+        sp_splice = sp[(sp_full_dates >= splice_lo) & (sp_full_dates <= splice_hi)]
+        n_excluded = 0
+        n_compared = 0
+        if len(sp_splice) > 0:
+            sf_splice_last = (
+                sp_splice.sort_index()
+                         .groupby(level='Ticker')
+                         .last()['Adj. Close']
+            )
+            with sqlite3.connect(str(db_path)) as _conn:
+                yf_splice = pd.read_sql_query(
+                    "SELECT ticker, date, close FROM prices_live "
+                    f"WHERE date >= '{splice_lo.strftime('%Y-%m-%d')}' "
+                    f"AND date <= '{splice_hi.strftime('%Y-%m-%d')}' "
+                    "ORDER BY ticker, date",
+                    _conn,
+                )
+            if not yf_splice.empty:
+                yf_splice_last = (
+                    yf_splice.sort_values(['ticker', 'date'])
+                             .groupby('ticker')['close']
+                             .last()
+                )
+                overlap = sf_splice_last.index.intersection(yf_splice_last.index)
+                n_compared = len(overlap)
+                if n_compared > 0:
+                    ratio = yf_splice_last.loc[overlap] / sf_splice_last.loc[overlap]
+                    bad = ratio[(ratio - 1.0).abs() > 0.05].index
+                    drop = [t for t in bad if t in price_fwd_yf.index]
+                    n_excluded = len(drop)
+                    if drop:
+                        price_fwd_yf = price_fwd_yf.drop(index=drop)
+        print(f'  Splice check @ {SIMFIN_PRICE_CEILING} ±5d: '
+              f'{n_compared} tickers compared, {n_excluded} excluded '
+              f'(>5% cross-source ratio anomaly).')
+
+        price_fwd = price_fwd_yf
+    else:
+        price_fwd = sp_forward.sort_index().groupby(level=0).last()['Adj. Close'].rename('p_fwd')
+
     prices = price_at_adj.to_frame().join(price_fwd, how='inner')
     prices['fwd_return'] = prices['p_fwd'] / prices['p_at_adj'] - 1
     prices = prices[prices['fwd_return'].between(-0.95, 5.0)]
@@ -833,6 +948,29 @@ def main():
     # result; any other same-forward-year period (e.g. an overlapping H2
     # window) is also excluded from training but not reported.
     periods = list(PERIODS)
+
+    # Pre-flight: PERIODS may contain pre-registered entries with unfilled state
+    # var placeholders (None). If the operator explicitly targets such a period
+    # via --oos-reserve, ABORT loudly. Otherwise, silently drop unready periods
+    # from the runlist so standard reproduction runs remain deterministic.
+    _STATE_KEYS = ('t10y', 'ism', 'curve_10y2y', 'core_cpi_yoy', 'hy_oas')
+    ready = []
+    for p in periods:
+        missing = [k for k, v in zip(_STATE_KEYS, p[2:]) if v is None]
+        if missing:
+            if args.oos_reserve and p[1][:4] == args.oos_reserve:
+                sys.exit(
+                    f'ERROR: --oos-reserve {args.oos_reserve} targets period '
+                    f'{p[0]}->{p[1]} but state vars {missing} are None '
+                    f'placeholders. Fill values from FRED/ISM/HY-OAS and '
+                    f'pre-register in docs/phase5_oos_2025_decision.md before '
+                    f'the locked run.'
+                )
+            print(f'  Note: skipping pre-registered period {p[0]}->{p[1]} '
+                  f'(state vars unfilled: {missing}).')
+            continue
+        ready.append(p)
+    periods = ready
     heldout_idxs = set()
     oos_report_idx = None
     if args.oos_reserve:
