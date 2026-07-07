@@ -6,6 +6,7 @@ Usage:
   python scripts/analyze_oos.py --csv data/audit/scored_OOS_<label>_oos_2024_locked.csv
 """
 import argparse
+import re
 import sqlite3
 from pathlib import Path
 import pandas as pd
@@ -120,11 +121,28 @@ def quarterly_decomposition(df, cutoff='2023-12-31', forward='2024-12-31'):
             print(f'    significantly; this edge has high timing risk.')
 
 
+def _infer_period_from_filename(csv_path):
+    """Infer (cutoff, forward) year-ends from a scored CSV filename like
+    ``scored_OOS_2024_to_2025_<run_id>.csv``. Falls back to the Phase 3
+    2023-12-31 -> 2024-12-31 defaults if the pattern doesn't match."""
+    m = re.search(r'(\d{4})_to_(\d{4})', Path(csv_path).name)
+    if not m:
+        return '2023-12-31', '2024-12-31'
+    # Label is built as f'{cutoff.year}_to_{forward.year}' in backtest.v2.py,
+    # so the two matched years are cutoff.year and forward.year directly.
+    cutoff_year, forward_year = m.group(1), m.group(2)
+    return f'{cutoff_year}-12-31', f'{forward_year}-12-31'
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--csv', required=True, help='Path to persisted OOS scored CSV')
     ap.add_argument('--no-quarterly', action='store_true',
                     help='Skip the SimFin quarterly decomposition (4.1).')
+    ap.add_argument('--cutoff', default=None,
+                    help='Cutoff date YYYY-MM-DD (default: inferred from CSV name).')
+    ap.add_argument('--forward', default=None,
+                    help='Forward date YYYY-MM-DD (default: inferred from CSV name).')
     args = ap.parse_args()
 
     df = pd.read_csv(args.csv)
@@ -191,7 +209,14 @@ def main():
 
     # ---- 4.1 Subperiod robustness ----
     if not args.no_quarterly:
-        quarterly_decomposition(df)
+        cutoff_arg = args.cutoff
+        forward_arg = args.forward
+        if not (cutoff_arg and forward_arg):
+            inferred_cutoff, inferred_forward = _infer_period_from_filename(args.csv)
+            cutoff_arg = cutoff_arg or inferred_cutoff
+            forward_arg = forward_arg or inferred_forward
+        print(f'\nQuarterly decomposition period: {cutoff_arg} -> {forward_arg}')
+        quarterly_decomposition(df, cutoff=cutoff_arg, forward=forward_arg)
 
 
 if __name__ == '__main__':

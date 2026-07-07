@@ -1,6 +1,6 @@
 # Phase 5 OOS Decision Record (2025)
 
-**Frozen commit:** _(to be recorded at commit-and-tag time; tagged `phase5-frozen` after this doc lands)_
+**Frozen commit:** `7082880` (tag `phase5-frozen`)
 **Prior frozen tag:** `phase3-frozen` (6aed4a335aff397c07ae0885eccc558697d398f9), with the Phase 4 diagnostic and the Phase 5 evaluation-layer amendment stacked on top.
 **Date rules written:** 2026-07-07
 **OOS period:** 2025 full year (cutoff 2024-12-31 → forward 2025-12-31)
@@ -113,4 +113,140 @@ sector-concentration cross-check before any change in position size.
 
 ## REALIZED RESULT (run-id: oos_2025_locked)
 
-_(this section is appended after the locked run; do not edit before the run)_
+Frozen commit: 7082880 (tag `phase5-frozen`)
+Run date: 2026-07-07
+Command:
+    python scripts/backtest.v2.py --oos-reserve 2025 \
+        --audit-dir data/audit --run-id oos_2025_locked --acknowledge-bias
+
+### Backtest headline (from scripts/backtest.v2.py)
+
+```
+OUT-OF-SAMPLE VALIDATION
+  Period:     2024->2025
+  Regime:     R5
+  Stocks:     2109 (scored)
+  Top decile:  +8.82%
+  Bot decile:  +1.82%
+  Universe:    -8.20%    (n=4127 incl. 2118 delisted-proxy rows)
+  TOP-ALPHA:  +17.02%    <-- PRIMARY metric, gross, per pre-reg
+  Top-alpha net: +7.28%   (universe basis excludes proxy)
+  Spread:      +7.00%
+  Net spread:  +8.23%
+  IC:         +0.1620
+```
+
+### Evaluation-layer amendment (Phase 5) evidence
+
+Forward-price fallback fired as designed:
+
+    FORWARD-PRICE SOURCE: yfinance (prices_live)
+    forward = 2025-12-31 > SIMFIN_PRICE_CEILING = 2025-06-03
+    yfinance-priced tickers: 2016 / 5805 in cutoff universe
+    Splice check @ 2025-06-03 ±5d: 2008 tickers compared,
+                                    13 excluded (>5% cross-source ratio anomaly).
+    Survivorship proxy: +2118 delisted tickers @ -30% (Shumway 1997 anchor)
+
+### Clean, no-proxy view (from scripts/analyze_oos.py)
+
+The pre-registered primary metric uses the same convention as Phase 3
+(top-decile mean minus the WHOLE universe mean, including the Shumway
+delist-proxy rows). Under Phase 5, `prices_live` covered only
+**2016 / 5805 ≈ 35 %** of the SimFin fundamentals universe, so 2118
+tickers received the −30 % proxy. That drove the gross universe mean to
+−8.20 % and mechanically inflated the headline top-alpha. The scored-
+frame view (proxy rows never carry potential scores; they only affect the
+universe baseline) is the fair comparison to Phase 3’s numbers:
+
+    OOS top-decile mean:  +8.82%
+    OOS universe mean:    +2.05%
+    OOS top-alpha:        +6.77%     <-- proxy-clean top-alpha
+    OOS top-decile n:     210
+
+### Confirming metrics
+
+- **OOS IC (Spearman) = +0.1620** — positive, within ~1 std of the Phase 3
+  training mean IC (+0.147 ± 0.057) and within a similar band on the
+  5-period training re-tally. **Confirming**.
+- **Top-alpha net = +7.28 %** — > 0 with gross alpha well over +3 %.
+  **Survives costs**.
+- **Sector concentration** — top-2 sectors 42.4 % of the top decile
+  (tech_software 21.4 %, consumer_disc 21.0 %). Below the 50 % warning
+  threshold but flagged CAUTION.
+- **Block-bootstrap** (`scripts/bootstrap_significance.py`, 1000 draws
+  across 4 blocks including the 2025 OOS): pooled point top-alpha
+  **+5.71 %**, 5th percentile **+3.88 %**, 95th **+7.12 %**,
+  `fraction alpha > 0 = 100 %`. **ROBUST** — edge survives resampling.
+- **Quarterly subperiod robustness** (2025 forward window, yfinance
+  fallback active):
+
+    | Quarter | top_ret | univ_ret | alpha  |
+    |---------|--------:|---------:|-------:|
+    | 2025-Q1 |  −7.30% |   −9.01% | +1.71% |
+    | 2025-Q2 | +15.75% |   +9.62% | +6.14% |
+    | 2025-Q3 |  +7.11% |   +9.37% | −2.25% |
+    | 2025-Q4 |  −0.28% |   +1.72% | −1.99% |
+
+    Positive quarters: **2 / 4**. Mean +0.90 %, std 3.41 %. Verdict:
+    **LUMPY** — half the annual alpha lived in Q2, and Q3/Q4 were
+    negative. This IS the subperiod gate referenced in the top-band
+    action rule.
+
+### Diagnostic-tool fix
+
+`scripts/analyze_oos.py` previously hard-coded the Phase 3
+`cutoff='2023-12-31', forward='2024-12-31'` defaults in
+`quarterly_decomposition`. Run against the 2025 OOS CSV it would
+decompose 2024 quarters against 2024 prices — silently wrong. The
+docstring in the file made the assumption implicit, not explicit. A
+minimal, evaluation-only patch adds `--cutoff` / `--forward` CLI args and
+an inferrer that reads them from the `<cutoff_year>_to_<forward_year>`
+segment of the CSV filename. This is a diagnostic-tool bug fix, not a
+scoring change; the corrected quarterly table above is the one used for
+the verdict.
+
+### Verdict (per pre-registered bands)
+
+- Primary metric: top-alpha gross (as recorded by the backtest headline,
+  Phase 3 convention) = **+17.02 %**, which lands in the `> +4 %` band
+  ("Edge persists"). The proxy-clean view (+6.77 %) also lands in the
+  same band.
+- Top-band action rule: **FULL SIZE only if ≥ 3 / 4 positive quarters**.
+  Observed: **2 / 4 positive quarters** with LUMPY verdict → the full-
+  size gate is **NOT** cleared.
+- Confirming metric: OOS IC +0.1620 positive and within band →
+  confirming.
+- Cost-net survival: top-alpha net +7.28 %, spread net +8.23 % → OK.
+- Sector concentration 42.4 % → CAUTION but not warning.
+
+**Action triggered: STAY HALF SIZE.** The alpha number is in the top
+band but its Q3–Q4 negative quarters and heavy dependence on Q2 fail the
+consistency gate. Per the no-retune commitment, this is the final Phase 5
+verdict; no rerun, no threshold nudge, no state-var adjustment.
+
+### Caveats (recorded, not rationalizations)
+
+- **prices_live coverage was 35 %, not > 90 %.** The 2118 delist-proxy
+  rows outnumber the priced universe (2016). This is a data-availability
+  artifact of yfinance vs SimFin fundamentals, not a real delisting wave.
+  It heavily inflated the gross top-alpha via a downward-biased universe
+  baseline. Practical implication: the +17.02 % headline is optically
+  strong but the +6.77 % clean number is the honest read on the model's
+  contribution over comparable stocks. Both remain in the top band.
+- **Splice-check dropped 13 / 2008 tickers** (0.6 %) for > 5 % cross-
+  source ratio anomaly at SIMFIN_PRICE_CEILING ± 5d. Very low
+  splice contamination; source-mixing is well controlled.
+- **Regime = R5.** Q1/Q4 negative alpha may reflect regime-mismatch tail
+  risk more than model failure; not a rationalization, just a hypothesis
+  the next OOS year can test.
+- **Two OOS years now on the record** — 2024 (+8.46 % under original
+  Phase 3 data, drifted to +9.07 % under refreshed SimFin) and 2025 as
+  above. Signal is now more than one data point; sample is still small.
+- **The suspicion check (> +12 % headline alpha) IS triggered by the
+  gross +17.02 %.** The mandatory cross-check: sector-concentration is
+  42.4 % top-2 (not a concentrated AI-capex bet by that threshold), and
+  the proxy-clean view is +6.77 % — well below the suspicion band. The
+  headline inflation source is understood (proxy math under low prices_live
+  coverage) and documented, so the suspicion check does not translate into
+  further action.
+
