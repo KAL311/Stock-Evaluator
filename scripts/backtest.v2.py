@@ -77,13 +77,13 @@ PERIODS = [
     ('2023-12-31', '2024-12-31', 0.0388, 47.0, -0.40, 0.039, 380),   # 2024 full year
     # 2025 full year — pre-registered per docs/phase5_oos_2025_decision.md.
     # Forward year 2025 exceeds SIMFIN_PRICE_CEILING; forward prices sourced from
-    # prices_live (yfinance). Fill state vars before locked run:
-    #   t10y         = FRED DGS10, close on 2024-12-31 (decimal, not %).
-    #   ism          = ISM Manufacturing PMI, Dec-2024 print (ismworld.org / Haver).
-    #   curve_10y2y  = FRED T10Y2Y, close on 2024-12-31.
-    #   core_cpi_yoy = FRED CPILFESL YoY %, Dec-2024 print (decimal).
-    #   hy_oas       = FRED BAMLH0A0HYM2 (ICE BofA US HY OAS), 2024-12-31 close (bps).
-    ('2024-12-31', '2025-12-31', None, None, None, None, None),      # 2025 full year (OOS)
+    # prices_live (yfinance). Values below are point-in-time as of 2024-12-31:
+    #   t10y         FRED DGS10        = 4.58%           -> 0.0458
+    #   ism          ISM Mfg PMI Dec-2024                = 49.3
+    #   curve_10y2y  FRED T10Y2Y                        = +0.33
+    #   core_cpi_yoy FRED CPILFESL YoY Dec-2024 (3.213%) -> 0.032
+    #   hy_oas       FRED BAMLH0A0HYM2 = 2.92%           -> 292 bps
+    ('2024-12-31', '2025-12-31', 0.0458, 49.3,  0.33, 0.032, 292),   # 2025 full year (OOS)
 ]
 
 
