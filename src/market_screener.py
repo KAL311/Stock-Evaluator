@@ -1218,6 +1218,44 @@ def _parse_pct(s):
     except ValueError:
         return None
 
+def load_ownership_live(tickers):
+    """Read latest ownership_live row per ticker (filing_date <= today).
+    Returns dict[ticker] -> {insider_own, inst_own, short_float}, same shape
+    as fetch_finviz() output minus 'price'. Values already normalized to
+    [0,1] fractions by refresh_ownership_fmp.py.
+
+    Silent no-op if the ownership_live table does not exist (script never run).
+    Consumed only when USE_FMP_OWNERSHIP=1 env var is set; see docs/ownership_layer.md.
+    """
+    if not CACHE_DB.exists():
+        return {}
+    conn = sqlite3.connect(str(CACHE_DB))
+    try:
+        # Check table exists — script may not have been run yet.
+        has_tbl = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='ownership_live'"
+        ).fetchone()
+        if not has_tbl:
+            return {}
+        today = datetime.now().date().isoformat()
+        placeholders = ','.join('?' for _ in tickers)
+        # Latest filing_date per ticker, gated on filing_date <= today for PIT hygiene.
+        q = (
+            "SELECT o.ticker, o.insider_own, o.inst_own, o.short_float "
+            "FROM ownership_live o "
+            "JOIN (SELECT ticker, MAX(filing_date) AS md FROM ownership_live "
+            f"      WHERE filing_date <= ? AND ticker IN ({placeholders}) GROUP BY ticker) m "
+            "ON o.ticker = m.ticker AND o.filing_date = m.md"
+        )
+        cur = conn.execute(q, (today, *tickers))
+        return {
+            r[0]: {'insider_own': r[1], 'inst_own': r[2], 'short_float': r[3]}
+            for r in cur.fetchall()
+        }
+    finally:
+        conn.close()
+
+
 def load_finviz_cache(tickers):
     if not CACHE_DB.exists():
         return {}
@@ -2266,9 +2304,19 @@ def compute_liveness_and_flag(df, db_path):
         return ','.join(parts) if parts else None
     df['flags'] = df['flags'].map(_strip_delisted)
 
+    # Loud-skip guard: when prices_live is missing or empty, the liveness
+    # gate cannot mark any ticker DELISTED, so downstream delisting
+    # protection is effectively OFF. Print a prominent WARNING to stderr
+    # (not just stdout) so an operator cannot miss it and mistakenly rely
+    # on a gate that is silently no-op. Refuse to no-op quietly.
+    _LOUD = ('!!! LIVENESS GATE INACTIVE: prices_live {reason} '
+             '- DELISTED flag NOT applied, delisting protection is OFF. '
+             'Run: python scripts/refreshprice.py --top 0 --period 2y')
     db_p = Path(str(db_path))
     if not db_p.exists():
-        print('  Liveness gate: cache DB not found, skipping.')
+        msg = _LOUD.format(reason='cache DB not found')
+        print(msg, file=sys.stderr)
+        print(f'  {msg}')
         return df
     try:
         conn = sqlite3.connect(str(db_p))
@@ -2278,16 +2326,22 @@ def compute_liveness_and_flag(df, db_path):
         )
         conn.close()
     except Exception as e:
-        print(f'  Liveness gate: prices_live unavailable ({e}); skipping.')
+        msg = _LOUD.format(reason=f'unavailable ({e})')
+        print(msg, file=sys.stderr)
+        print(f'  {msg}')
         return df
     if pl is None or pl.empty:
-        print('  Liveness gate: prices_live empty; skipping.')
+        msg = _LOUD.format(reason='empty')
+        print(msg, file=sys.stderr)
+        print(f'  {msg}')
         return df
 
     pl['last_px'] = pd.to_datetime(pl['last_px'], errors='coerce')
     pl = pl.dropna(subset=['last_px'])
     if pl.empty:
-        print('  Liveness gate: prices_live has no parseable dates; skipping.')
+        msg = _LOUD.format(reason='has no parseable dates')
+        print(msg, file=sys.stderr)
+        print(f'  {msg}')
         return df
 
     table_max = pl['last_px'].max()
@@ -4263,7 +4317,16 @@ def main():
         print()
         # Finviz fallback for insider/inst ownership + short float. Threaded; 24h cache per ticker.
         # Pre-filter to tickers above market-cap floor to avoid wasting fetches.
-        if ENABLE_FINVIZ:
+        # USE_FMP_OWNERSHIP=1 swaps the Finviz path for the ownership_live table
+        # populated by scripts/refresh_ownership_fmp.py. Opt-in gate — see
+        # docs/ownership_layer.md for freeze rationale.
+        use_fmp_own = os.environ.get('USE_FMP_OWNERSHIP', '').lower() in ('1', 'true', 'yes')
+        if use_fmp_own:
+            caps_series = (sp_meta['sp_Close'] * sp_meta['sp_Shares Outstanding'])
+            candidate_tickers = caps_series[caps_series >= MIN_MARKET_CAP].index.tolist()
+            finviz = load_ownership_live(candidate_tickers)
+            print(f'  FMP ownership_live: {len(finviz)}/{len(candidate_tickers)} tickers gained ownership data')
+        elif ENABLE_FINVIZ:
             # FINVIZ_HEALTH_CHECK_ONLY: probe connectivity and exit.
             if os.environ.get('FINVIZ_HEALTH_CHECK_ONLY', '').lower() in ('1', 'true', 'yes'):
                 probe = _fetch_one_finviz('AAPL', retries=3)

@@ -1,3 +1,8 @@
+# Secrets
+FMP_API.env
+*.env
+!*.env.example
+
 # Python
 __pycache__/
 *.pyc
@@ -29,13 +34,25 @@ archive/
 *.zip
 *.jsonl
 
+# Session scratch files (audit intermediates, diff snapshots)
+/.scratch_*
+data/stock_cache.db.audit_backup
+data/stock_cache.db.*_backup
+
 # Botched-redirect 0-byte junk fragments in repo root
+# Root cause: Python code with `>=`, `>`, `<`, or `{var}` embedded in a Bash
+# command without single-quoting or heredoc. The shell parses the operator
+# as a file redirect, creating an empty file. Fix is discipline
+# (always wrap Python in `python << 'PYEOF' ... PYEOF` or single quotes),
+# but keep these patterns as a defensive fallback so a slip does not
+# pollute the tree.
 /+*
 /(*
 /0)
 /float
 /threshold,+
 /${MIN_MARKET_CAP
+/MIN_MARKET_CAP*
 /large_thresh
 /val],
 /500%
@@ -43,3 +60,12 @@ archive/
 /72s}'),
 /24h)
 /2.6
+/20
+/{batch_ok*
+/{insider_own*
+/{*}
+# Broad shape-based catches. Root-only — do not accidentally shadow files
+# in real subdirectories.
+/*].index.tolist*
+/*.tolist*
+/*),+
