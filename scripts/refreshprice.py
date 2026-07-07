@@ -3,10 +3,10 @@
 Writes to prices_live table. SimFin data and frozen scoring untouched.
 
 Usage:
-  python scripts/refresh_prices_yfinance.py              # refresh top 200
-  python scripts/refresh_prices_yfinance.py --top 500    # refresh top 500
-  python scripts/refresh_prices_yfinance.py --top 0      # refresh ALL tickers
-  python scripts/refresh_prices_yfinance.py --period 2y  # lookback (default 1y)
+  python scripts/refreshprice.py              # refresh top 200
+  python scripts/refreshprice.py --top 500    # refresh top 500
+  python scripts/refreshprice.py --top 0      # refresh ALL tickers
+  python scripts/refreshprice.py --period 2y  # lookback (default 1y)
 """
 import argparse
 import logging

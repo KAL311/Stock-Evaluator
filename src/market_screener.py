@@ -2220,6 +2220,141 @@ def load_cache():
     print(f'  Loaded {len(df)} stocks from cache (updated {last_upd.strftime("%Y-%m-%d %H:%M")})')
     return df
 
+def _persist_flags_to_cache(df, db_path):
+    """Write updated `flags` column back to the stocks table without touching
+    schema or other columns. Silent no-op if DB is missing."""
+    db_p = Path(str(db_path))
+    if not db_p.exists() or 'flags' not in df.columns or 'ticker' not in df.columns:
+        return
+    try:
+        conn = sqlite3.connect(str(db_p))
+        payload = [
+            (None if (f is None or (isinstance(f, float) and pd.isna(f))) else str(f), t)
+            for t, f in zip(df['ticker'].tolist(), df['flags'].tolist())
+        ]
+        conn.executemany("UPDATE stocks SET flags=? WHERE ticker=?", payload)
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f'  Warning: could not persist flags to cache ({e})')
+
+
+def compute_liveness_and_flag(df, db_path):
+    """Post-scoring liveness gate driven by prices_live (yfinance).
+    Additive, freeze-safe: does NOT touch scoring; only appends DELISTED
+    to the flags column and writes an audit CSV. See docs/price_layer.md.
+
+    LIVE     : ticker's last_px within 10 calendar days of prices_live max.
+    DELISTED : ticker's last_px more than 30 days older than table max, OR
+               ticker absent from prices_live when coverage >= 80%.
+    UNKNOWN  : ticker absent AND coverage < 80% (refresh incomplete).
+    STALE    : gap 10-30 days (no flag, no exclusion).
+    Empty/missing prices_live → warn and skip.
+    """
+    if 'flags' not in df.columns:
+        df['flags'] = None
+    # Strip pre-existing DELISTED so re-running is idempotent.
+    def _strip_delisted(s):
+        if s is None:
+            return None
+        try:
+            if pd.isna(s):
+                return None
+        except (TypeError, ValueError):
+            pass
+        parts = [p for p in str(s).split(',') if p and p != 'DELISTED']
+        return ','.join(parts) if parts else None
+    df['flags'] = df['flags'].map(_strip_delisted)
+
+    db_p = Path(str(db_path))
+    if not db_p.exists():
+        print('  Liveness gate: cache DB not found, skipping.')
+        return df
+    try:
+        conn = sqlite3.connect(str(db_p))
+        pl = pd.read_sql_query(
+            "SELECT ticker, MAX(date) AS last_px FROM prices_live GROUP BY ticker",
+            conn,
+        )
+        conn.close()
+    except Exception as e:
+        print(f'  Liveness gate: prices_live unavailable ({e}); skipping.')
+        return df
+    if pl is None or pl.empty:
+        print('  Liveness gate: prices_live empty; skipping.')
+        return df
+
+    pl['last_px'] = pd.to_datetime(pl['last_px'], errors='coerce')
+    pl = pl.dropna(subset=['last_px'])
+    if pl.empty:
+        print('  Liveness gate: prices_live has no parseable dates; skipping.')
+        return df
+
+    table_max = pl['last_px'].max()
+    scored_tickers = set(df.loc[df['potential_score'].notna(), 'ticker'].tolist())
+    n_scored = len(scored_tickers)
+    if n_scored == 0:
+        coverage = 0.0
+    else:
+        coverage = len(scored_tickers & set(pl['ticker'].tolist())) / n_scored
+
+    pl_map = dict(zip(pl['ticker'], pl['last_px']))
+    coverage_ok = coverage >= 0.80
+
+    def _classify(t):
+        lp = pl_map.get(t)
+        if lp is None:
+            return 'DELISTED' if coverage_ok else 'UNKNOWN'
+        gap_days = (table_max - lp).days
+        if gap_days <= 10:
+            return 'LIVE'
+        if gap_days > 30:
+            return 'DELISTED'
+        return 'STALE'
+
+    df['live_status'] = df['ticker'].map(_classify)
+    # last_px_date as ISO string (safe for CSV / display).
+    df['last_px_date'] = df['ticker'].map(
+        lambda t: pl_map[t].date().isoformat() if t in pl_map else None
+    )
+
+    counts = df['live_status'].value_counts().to_dict()
+    n_live = int(counts.get('LIVE', 0))
+    n_del = int(counts.get('DELISTED', 0))
+    n_unk = int(counts.get('UNKNOWN', 0))
+    n_stale = int(counts.get('STALE', 0))
+
+    if not coverage_ok:
+        print(f'  WARNING: prices_live covers only {coverage*100:.0f}% of scored '
+              f'tickers (< 80%). Not treating absent tickers as DELISTED. '
+              f'Run: python scripts/refreshprice.py --top 0')
+
+    print(f'  Liveness: {n_live} live / {n_del} delisted / {n_unk} unknown '
+          f'(+{n_stale} stale-gap) '
+          f'(prices_live coverage {coverage*100:.0f}%, table max {table_max.date()})')
+
+    del_mask = df['live_status'] == 'DELISTED'
+    if del_mask.any():
+        existing = df.loc[del_mask, 'flags'].fillna('')
+        appended = existing.where(existing == '', existing + ',') + 'DELISTED'
+        df.loc[del_mask, 'flags'] = appended
+        # Audit CSV for downstream reconciliation.
+        try:
+            audit_dir = DATA_DIR / 'audit'
+            audit_dir.mkdir(parents=True, exist_ok=True)
+            stamp = datetime.now().strftime('%Y%m%d')
+            audit_path = audit_dir / f'delisted_exclusions_{stamp}.csv'
+            cols = ['ticker', 'last_px_date', 'filing_age_days', 'potential_score']
+            audit_df = df.loc[del_mask, [c for c in cols if c in df.columns]].copy()
+            audit_df = audit_df.sort_values('potential_score', ascending=False, na_position='last')
+            audit_df.to_csv(audit_path, index=False)
+            print(f'  Wrote delisted audit: {audit_path.name} ({int(del_mask.sum())} names)')
+        except Exception as e:
+            print(f'  Warning: failed to write delisted audit CSV ({e})')
+
+    return df
+
+
 QUERY_FIELDS = {
     'pe': 'pe', 'p/e': 'pe', 'price': 'price', 'market cap': 'market_cap',
     'marketcap': 'market_cap', 'pb': 'pb', 'p/b': 'pb', 'ps': 'ps', 'p/s': 'ps',
@@ -2273,7 +2408,8 @@ QUERY_FIELDS = {
 }
 
 FLAG_NAMES = ['DEEP_VALUE', 'FALLEN_ANGEL', 'QUIET_COMPOUNDER',
-              'MOMENTUM_VALUE', 'AVOID_VALUE_TRAP', 'OVEREXTENDED']
+              'MOMENTUM_VALUE', 'AVOID_VALUE_TRAP', 'OVEREXTENDED',
+              'DELISTED']
 
 SECTOR_KEYWORDS = {
     'tech': 'tech_software', 'technology': 'tech_software', 'software': 'tech_software',
@@ -2334,6 +2470,17 @@ def parse_query(text):
     # 'expensive' on valuation_score means high valuation_score = cheap, so flip to low first.
     if 'expensive' in t or 'overvalued' in t:
         sort_desc = False  # ascending: low valuation score (= expensive) first
+    # Liveness override: default is to hide DELISTED tickers from ranked output.
+    # `include delisted` (or `with delisted`) turns the gate off for this query.
+    include_delisted = bool(
+        re.search(r'\binclude\s+delisted\b', t)
+        or re.search(r'\bwith\s+delisted\b', t)
+        or re.search(r'\bshow\s+delisted\b', t)
+    )
+    # If user explicitly filters `DELISTED` via the flag_filters path (e.g.
+    # "DELISTED in energy"), they clearly want to see them.
+    if 'DELISTED' in flag_filters:
+        include_delisted = True
     filters = []
     if re.search(r'\bfresh\b', t):
         filters.append(('filing_age_days', '<', 365))
@@ -2371,12 +2518,17 @@ def parse_query(text):
         lm = re.search(r'top\s*(\d+)', t)
         if lm:
             limit = int(lm.group(1))
-    return sectors, filters, flag_filters, sort_field, sort_label, sort_desc, limit
+    return sectors, filters, flag_filters, sort_field, sort_label, sort_desc, limit, include_delisted
 
-def execute_query(df, sectors, filters, flag_filters, sort_field, sort_label, sort_desc, limit):
+def execute_query(df, sectors, filters, flag_filters, sort_field, sort_label,
+                  sort_desc, limit, include_delisted=False):
     result = df.copy()
     if sectors:
         result = result[result['sector_group'].isin(sectors)]
+    # Default liveness gate: hide DELISTED unless caller opted in.
+    if (not include_delisted) and 'flags' in result.columns:
+        mask = result['flags'].fillna('').str.contains('DELISTED')
+        result = result[~mask]
     # Apply flag filters: row matches if ALL requested flags are present in its flags column.
     if flag_filters and 'flags' in result.columns:
         for fname in flag_filters:
@@ -2712,6 +2864,13 @@ def print_why(df, ticker):
     print(f'  {"="*72}')
     print(f'  WHY {ticker} - {r.get("company", "")}')
     print(f'  {"="*72}')
+    flags_str_top = r.get('flags')
+    if flags_str_top and not pd.isna(flags_str_top) and 'DELISTED' in str(flags_str_top):
+        lpd = r.get('last_px_date') if 'last_px_date' in r.index else None
+        lpd_txt = f' (last live price {lpd})' if lpd else ''
+        print(f'  !! DELISTED — no fresh price data{lpd_txt}. This ticker is '
+              f'excluded from ranked output and all portfolios. See '
+              f'data/audit/delisted_exclusions_*.csv.')
     print(f'  Sector: {sg or "(unmapped)"}  ({n_sector} stocks in sector)')
     pot = r.get('potential_score')
     if pot is not None and not pd.isna(pot):
@@ -4019,6 +4178,8 @@ def interactive_loop(df):
     fresh in tech             — filings within 1 year only
     liquid in tech            — large or mid liquidity tier only
     tradeable in tech         — large liquidity tier only
+    include delisted top 50   — restore DELISTED names (hidden by default)
+    DELISTED                  — show only DELISTED names
     FALLEN_ANGEL in tech
     DEEP_VALUE energy top 50
     banks with pe_ttm < 15 sorted by dividend
@@ -4052,8 +4213,9 @@ def interactive_loop(df):
                 continue
             print_compare(df, tks)
             continue
-        sectors, filters, flag_filters, sf_, sl_, sd_, lim = parse_query(q)
-        result = execute_query(df, sectors, filters, flag_filters, sf_, sl_, sd_, lim)
+        sectors, filters, flag_filters, sf_, sl_, sd_, lim, incl_del = parse_query(q)
+        result = execute_query(df, sectors, filters, flag_filters, sf_, sl_, sd_, lim,
+                               include_delisted=incl_del)
         if result.empty:
             print('  No results match your query.')
             continue
@@ -4135,6 +4297,12 @@ def main():
         else:
             print('  Error: no stocks could be processed.')
             sys.exit(1)
+    # Post-scoring liveness gate (report-only; scoring untouched).
+    df = compute_liveness_and_flag(df, CACHE_DB)
+    # Persist just the flags column back to the cache so downstream tools
+    # (scripts/generate_html_report.py) see the DELISTED tag without needing
+    # to duplicate the liveness computation.
+    _persist_flags_to_cache(df, CACHE_DB)
     interactive_loop(df)
     print('  Done.')
 

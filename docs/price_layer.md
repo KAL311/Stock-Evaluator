@@ -20,14 +20,18 @@ These two sources NEVER mix in the scoring pipeline. The freeze tag
 
 ## Refresh cadence
 
-Run `scripts/refresh_prices_yfinance.py` daily. Suggested cron:
+Run `scripts/refreshprice.py` daily. Suggested cron:
 
     0 6 * * 1-5 cd /path/to/Stock\ Evaluator && \
-        python scripts/refresh_prices_yfinance.py --top 1000
+        python scripts/refreshprice.py --top 1000
 
 The `--top 1000` flag refreshes the top 1000 by potential_score, which
 covers the entire top-decile pool plus margin. Full universe refresh
 (~2400 tickers) is also viable but slower; use for weekend deep refresh.
+
+The script was previously named `refresh_prices_yfinance.py` and was
+renamed to `refreshprice.py`. All in-repo references (this doc and the
+script's own docstring) now use the current filename.
 
 ## Caveats
 

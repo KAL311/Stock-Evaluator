@@ -40,6 +40,7 @@ FLAG_TOOLTIPS = {
     "QUIET_COMPOUNDER": "High quality (>80), growing revenue, low volatility. Durable compounder.",
     "MOMENTUM_VALUE": "Cheap and already turning up — valuation >70 with positive 6-month return.",
     "OVEREXTENDED": "Expensive and near 52-week high — fragile, elevated drawdown risk. A warning flag.",
+    "DELISTED": "No fresh price data in prices_live (yfinance). Likely delisted, acquired, or taken private. Excluded from all portfolios; shown greyed out here for reference only.",
 }
 
 
@@ -230,15 +231,23 @@ def compute_portfolios(df, sector_cap=4):
         if c not in df.columns:
             df[c] = np.nan
 
-    threshold = df["potential_score"].quantile(0.90)
-    candidates = df[
-        (df["potential_score"] >= threshold) &
-        (df["avg_dollar_volume_30d"].fillna(0) >= 1_000_000) &
-        (df["stale_fundamentals"].fillna(0) != 1)
+    # Liveness gate: DELISTED names are hard-excluded from every portfolio.
+    # Computed upstream in src/market_screener.compute_liveness_and_flag; we
+    # simply honor the flag here so no delisted ticker can enter a portfolio.
+    delisted_mask = df["flags"].fillna("").str.contains("DELISTED")
+    n_delisted = int(delisted_mask.sum())
+    live_df = df[~delisted_mask]
+
+    threshold = live_df["potential_score"].quantile(0.90)
+    candidates = live_df[
+        (live_df["potential_score"] >= threshold) &
+        (live_df["avg_dollar_volume_30d"].fillna(0) >= 1_000_000) &
+        (live_df["stale_fundamentals"].fillna(0) != 1)
     ].copy()
     if len(candidates) == 0:
-        candidates = df.nlargest(int(len(df) * 0.1), "potential_score").copy()
-    print(f"  Top-decile candidates (after liquidity/staleness filter): {len(candidates)}")
+        candidates = live_df.nlargest(int(len(live_df) * 0.1), "potential_score").copy()
+    print(f"  Top-decile candidates (after liquidity/staleness filter): {len(candidates)}"
+          f" (excluded {n_delisted} DELISTED)")
 
     candidates["_potential_pctile"] = candidates["potential_score"].rank(pct=True)
     candidates["_return_6m_pctile"] = candidates["return_6m"].fillna(0).rank(pct=True)
@@ -504,6 +513,7 @@ function renderFlags(stock) {
     else if(f==='FALLEN_ANGEL') cls+='bg-amber-900/30 text-amber-400';
     else if(f==='QUIET_COMPOUNDER') cls+='bg-blue-900/30 text-blue-400';
     else if(f==='OVEREXTENDED') cls+='bg-red-900/30 text-red-400';
+    else if(f==='DELISTED') cls+='bg-gray-800/60 text-gray-500 border border-gray-600';
     else cls+='bg-gray-700/50 text-gray-400';
     return '<span class="'+cls+'" title="'+escapeHtml(tip)+'">'+f+'</span>';
   }).join('');
@@ -829,7 +839,9 @@ function displayScreener() {
   var tbody=document.getElementById('screenerBody');
   var html='';
   page.forEach(function(s) {
-    html+='<tr data-ticker="'+escapeHtml(s.ticker)+'" class="cursor-pointer border-b border-gray-800 last:border-0">';
+    var isDelisted=(s.flags||'').indexOf('DELISTED')!==-1;
+    var rowCls='cursor-pointer border-b border-gray-800 last:border-0'+(isDelisted?' opacity-40 line-through-none italic':'');
+    html+='<tr data-ticker="'+escapeHtml(s.ticker)+'" class="'+rowCls+'">';
     html+='<td class="text-col font-medium text-blue-400">'+escapeHtml(s.ticker)+'</td>';
     html+='<td class="text-col text-xs max-w-[200px] truncate">'+escapeHtml((s.company||'').substring(0,35))+'</td>';
     html+='<td class="text-col text-xs">'+fmtSector(s.sector_group)+'</td>';
