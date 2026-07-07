@@ -79,7 +79,7 @@ consumer disc with roe > 0.15 sorted by roic   Compound query
 | `MIN_DOLLAR_VOLUME` | `1_000_000` ($1M) | Minimum median daily dollar volume |
 | `CONTRARIAN_MODE` | `True` | `True` = recent underperformance scores higher on sentiment |
 | `POTENTIAL_WEIGHTS` | valuation 0.35, quality 0.30, growth 0.20, sentiment 0.15 | Master sub-score weights (must sum to 1.0) |
-| `CACHE_SCHEMA_VERSION` | 6 | Bump when cache schema changes; forces rebuild on mismatch |
+| `CACHE_SCHEMA_VERSION` | 13 | Bump when cache schema changes; forces rebuild on mismatch |
 
 ---
 
@@ -106,6 +106,14 @@ None.
 ---
 
 ## Backtest (`scripts/backtest.py`)
+
+> **Reference only.** `backtest.py` (v1) is retained for historical
+> reference. The canonical walk-forward backtest is
+> `scripts/backtest.v2.py` (regime-adaptive, GICS-ranked, with cost model
+> and OOS holdout support). v1 queries the `stocks` table in
+> `data/stock_cache.db` and will exit with `no such table: stocks` unless
+> `src/market_screener.py` has been run first to populate that cache.
+> New evaluation work should target v2, not v1.
 
 Multi-period point-in-time backtest of `potential_score` across four 1-year windows using SimFin historical data. Batch script (no REPL).
 

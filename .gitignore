@@ -8,6 +8,17 @@ __pycache__/
 data/simfin/
 data/*.db
 data/*.log
+ruvector.db
+
+# Audit CSVs are regenerable from a locked run; JSONs remain tracked
+# as the primary run-metadata record.
+data/audit/*.csv
+
+# Rendered HTML reports (regenerable via scripts/generate_html_report.py)
+reports/*.html
+
+# Local archive of stray outputs / session captures
+archive/
 
 # Backups
 *.bak
