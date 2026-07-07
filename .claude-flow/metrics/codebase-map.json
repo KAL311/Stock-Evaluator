@@ -1,0 +1,11 @@
+{
+  "timestamp": "2026-07-07T02:42:33.257Z",
+  "projectRoot": "C:\\Users\\fraun\\OneDrive\\Documents\\Stock Evaluator",
+  "structure": {
+    "hasPackageJson": false,
+    "hasTsConfig": false,
+    "hasClaudeConfig": true,
+    "hasClaudeFlow": true
+  },
+  "scannedAt": 1783392153257
+}

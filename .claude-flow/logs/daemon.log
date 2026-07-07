@@ -1,0 +1,12 @@
+[2026-07-07T02:42:33.250Z] [INFO] Scheduled map (interval: 900s, first run in 0s)
+[2026-07-07T02:42:33.251Z] [INFO] Scheduled audit (interval: 600s, first run in 120s)
+[2026-07-07T02:42:33.251Z] [INFO] Scheduled optimize (interval: 900s, first run in 240s)
+[2026-07-07T02:42:33.251Z] [INFO] Scheduled consolidate (interval: 1800s, first run in 360s)
+[2026-07-07T02:42:33.251Z] [INFO] Scheduled testgaps (interval: 1200s, first run in 480s)
+[2026-07-07T02:42:33.251Z] [INFO] Scheduled backup (interval: 86400s, first run in 600s)
+[2026-07-07T02:42:33.252Z] [INFO] Scheduled harness (interval: 21600s, first run in 720s)
+[2026-07-07T02:42:33.252Z] [INFO] Lifecycle monitor active (ttl=43200s)
+[2026-07-07T02:42:33.253Z] [INFO] Daemon started (PID: 3300, CPUs: 12, workers: 7, maxCpuLoad: 9.600000000000001, minFreeMemoryPercent: 10%)
+[2026-07-07T02:42:33.254Z] [INFO] Claude Code headless mode available - AI workers enabled
+[2026-07-07T02:42:33.256Z] [INFO] Starting worker: map (1/2 concurrent)
+[2026-07-07T02:42:33.258Z] [INFO] Worker map completed in 3ms
