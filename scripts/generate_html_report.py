@@ -231,12 +231,23 @@ def compute_portfolios(df, sector_cap=4):
         if c not in df.columns:
             df[c] = np.nan
 
-    # Liveness gate: DELISTED names are hard-excluded from every portfolio.
-    # Computed upstream in src/market_screener.compute_liveness_and_flag; we
-    # simply honor the flag here so no delisted ticker can enter a portfolio.
-    delisted_mask = df["flags"].fillna("").str.contains("DELISTED")
+    # Liveness gate: DELISTED and UNPRICED names are hard-excluded from
+    # every portfolio.  Both flags are set upstream in
+    # src/market_screener.compute_liveness_and_flag:
+    #   DELISTED  = no recent prices_live data AND stale filing (>365d)
+    #               -> corroborated delisting.
+    #   UNPRICED  = no recent prices_live data BUT recent filing (<=365d)
+    #               -> likely vendor blind-spot.  Still excluded here
+    #               because we cannot value the position, but the label is
+    #               honest ("cannot price right now") instead of falsely
+    #               claiming the name is dead.
+    flags_str = df["flags"].fillna("")
+    delisted_mask = flags_str.str.contains("DELISTED")
+    unpriced_mask = flags_str.str.contains("UNPRICED")
+    excluded_mask = delisted_mask | unpriced_mask
     n_delisted = int(delisted_mask.sum())
-    live_df = df[~delisted_mask]
+    n_unpriced = int(unpriced_mask.sum())
+    live_df = df[~excluded_mask]
 
     threshold = live_df["potential_score"].quantile(0.90)
     candidates = live_df[
@@ -247,7 +258,7 @@ def compute_portfolios(df, sector_cap=4):
     if len(candidates) == 0:
         candidates = live_df.nlargest(int(len(live_df) * 0.1), "potential_score").copy()
     print(f"  Top-decile candidates (after liquidity/staleness filter): {len(candidates)}"
-          f" (excluded {n_delisted} DELISTED)")
+          f" (excluded {n_delisted} DELISTED, {n_unpriced} UNPRICED)")
 
     candidates["_potential_pctile"] = candidates["potential_score"].rank(pct=True)
     candidates["_return_6m_pctile"] = candidates["return_6m"].fillna(0).rank(pct=True)

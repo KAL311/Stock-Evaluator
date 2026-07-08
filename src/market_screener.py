@@ -2291,8 +2291,9 @@ def compute_liveness_and_flag(df, db_path):
     """
     if 'flags' not in df.columns:
         df['flags'] = None
-    # Strip pre-existing DELISTED so re-running is idempotent.
-    def _strip_delisted(s):
+    # Strip pre-existing DELISTED and UNPRICED so re-running is idempotent.
+    _LIVENESS_LABELS = {'DELISTED', 'UNPRICED'}
+    def _strip_liveness(s):
         if s is None:
             return None
         try:
@@ -2300,9 +2301,9 @@ def compute_liveness_and_flag(df, db_path):
                 return None
         except (TypeError, ValueError):
             pass
-        parts = [p for p in str(s).split(',') if p and p != 'DELISTED']
+        parts = [p for p in str(s).split(',') if p and p not in _LIVENESS_LABELS]
         return ','.join(parts) if parts else None
-    df['flags'] = df['flags'].map(_strip_delisted)
+    df['flags'] = df['flags'].map(_strip_liveness)
 
     # Loud-skip guard: when prices_live is missing or empty, the liveness
     # gate cannot mark any ticker DELISTED, so downstream delisting
@@ -2355,15 +2356,42 @@ def compute_liveness_and_flag(df, db_path):
     pl_map = dict(zip(pl['ticker'], pl['last_px']))
     coverage_ok = coverage >= 0.80
 
+    # Filing-age corroboration: a ticker with no recent price data is only
+    # classified DELISTED if its most recent SimFin filing is also stale
+    # (filing_age_days > FILING_AGE_DELIST_MIN). A recent filer that this
+    # environment's yfinance cannot resolve is flagged UNPRICED instead
+    # (vendor blind spot suspect) so that a live large-cap is not silently
+    # tagged as dead by a data-fetch quirk. Both flags are still hard-
+    # excluded from portfolios in compute_portfolios; the change is one of
+    # LABEL, not exclusion.
+    FILING_AGE_DELIST_MIN = 365
+    age_map = dict(zip(df['ticker'], df.get('filing_age_days', pd.Series(dtype='float'))))
+
+    def _has_stale_filing(t):
+        age = age_map.get(t)
+        if age is None:
+            return True
+        try:
+            if pd.isna(age):
+                return True
+        except (TypeError, ValueError):
+            pass
+        try:
+            return float(age) > FILING_AGE_DELIST_MIN
+        except (TypeError, ValueError):
+            return True
+
     def _classify(t):
         lp = pl_map.get(t)
         if lp is None:
-            return 'DELISTED' if coverage_ok else 'UNKNOWN'
+            if not coverage_ok:
+                return 'UNKNOWN'
+            return 'DELISTED' if _has_stale_filing(t) else 'UNPRICED'
         gap_days = (table_max - lp).days
         if gap_days <= 10:
             return 'LIVE'
         if gap_days > 30:
-            return 'DELISTED'
+            return 'DELISTED' if _has_stale_filing(t) else 'UNPRICED'
         return 'STALE'
 
     df['live_status'] = df['ticker'].map(_classify)
@@ -2377,6 +2405,7 @@ def compute_liveness_and_flag(df, db_path):
     n_del = int(counts.get('DELISTED', 0))
     n_unk = int(counts.get('UNKNOWN', 0))
     n_stale = int(counts.get('STALE', 0))
+    n_unpriced = int(counts.get('UNPRICED', 0))
 
     # Coverage-floor visibility. 80% is the activation threshold for
     # "absent-as-DELISTED" semantics (kept unchanged); the block below only
@@ -2399,28 +2428,43 @@ def compute_liveness_and_flag(df, db_path):
         print(marginal_msg, file=sys.stderr)
         print(f'  {marginal_msg}')
 
-    print(f'  Liveness: {n_live} live / {n_del} delisted / {n_unk} unknown '
-          f'(+{n_stale} stale-gap) '
+    print(f'  Liveness: {n_live} live / {n_del} delisted (corroborated) / '
+          f'{n_unpriced} unpriced (recent filer, vendor blind-spot suspect) / '
+          f'{n_unk} unknown (+{n_stale} stale-gap) '
           f'(prices_live coverage {coverage*100:.0f}%, table max {table_max.date()})')
 
+    def _append_flag(mask, label):
+        if not mask.any():
+            return
+        existing = df.loc[mask, 'flags'].fillna('')
+        appended = existing.where(existing == '', existing + ',') + label
+        df.loc[mask, 'flags'] = appended
+
     del_mask = df['live_status'] == 'DELISTED'
-    if del_mask.any():
-        existing = df.loc[del_mask, 'flags'].fillna('')
-        appended = existing.where(existing == '', existing + ',') + 'DELISTED'
-        df.loc[del_mask, 'flags'] = appended
-        # Audit CSV for downstream reconciliation.
-        try:
-            audit_dir = DATA_DIR / 'audit'
-            audit_dir.mkdir(parents=True, exist_ok=True)
-            stamp = datetime.now().strftime('%Y%m%d')
-            audit_path = audit_dir / f'delisted_exclusions_{stamp}.csv'
-            cols = ['ticker', 'last_px_date', 'filing_age_days', 'potential_score']
-            audit_df = df.loc[del_mask, [c for c in cols if c in df.columns]].copy()
+    unpriced_mask = df['live_status'] == 'UNPRICED'
+    _append_flag(del_mask, 'DELISTED')
+    _append_flag(unpriced_mask, 'UNPRICED')
+
+    # Audit CSV for downstream reconciliation - one file each, so operators
+    # can review the vendor-blind-spot list separately.
+    try:
+        audit_dir = DATA_DIR / 'audit'
+        audit_dir.mkdir(parents=True, exist_ok=True)
+        stamp = datetime.now().strftime('%Y%m%d')
+        cols = ['ticker', 'last_px_date', 'filing_age_days', 'potential_score']
+        for mask, label, fname in (
+            (del_mask, 'DELISTED', f'delisted_exclusions_{stamp}.csv'),
+            (unpriced_mask, 'UNPRICED', f'unpriced_review_{stamp}.csv'),
+        ):
+            if not mask.any():
+                continue
+            audit_path = audit_dir / fname
+            audit_df = df.loc[mask, [c for c in cols if c in df.columns]].copy()
             audit_df = audit_df.sort_values('potential_score', ascending=False, na_position='last')
             audit_df.to_csv(audit_path, index=False)
-            print(f'  Wrote delisted audit: {audit_path.name} ({int(del_mask.sum())} names)')
-        except Exception as e:
-            print(f'  Warning: failed to write delisted audit CSV ({e})')
+            print(f'  Wrote {label} audit: {audit_path.name} ({int(mask.sum())} names)')
+    except Exception as e:
+        print(f'  Warning: failed to write liveness audit CSVs ({e})')
 
     return df
 
