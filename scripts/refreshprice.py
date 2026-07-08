@@ -155,6 +155,15 @@ def main():
         default=str(DB_PATH),
         help=f"Path to stock_cache.db (default: {DB_PATH})",
     )
+    ap.add_argument(
+        "--tickers-file",
+        default=None,
+        help=(
+            "Path to a newline-delimited file of tickers to refresh. "
+            "When set, overrides --top and only these tickers are fetched. "
+            "Useful for retry passes on suspected transient yfinance failures."
+        ),
+    )
     args = ap.parse_args()
 
     db_path = Path(args.db)
@@ -165,11 +174,26 @@ def main():
     conn = sqlite3.connect(str(db_path))
     conn.executescript(SCHEMA)
 
-    top_arg = None if args.top == 0 else args.top
-    tickers = get_tickers(conn, top_arg)
-    if not tickers:
-        print("ERROR: No tickers found in database.", file=sys.stderr)
-        sys.exit(1)
+    if args.tickers_file:
+        tf_path = Path(args.tickers_file)
+        if not tf_path.exists():
+            print(f"ERROR: --tickers-file not found: {tf_path}", file=sys.stderr)
+            sys.exit(1)
+        tickers = [
+            line.strip()
+            for line in tf_path.read_text().splitlines()
+            if line.strip() and not line.strip().startswith("#")
+        ]
+        if not tickers:
+            print(f"ERROR: --tickers-file is empty: {tf_path}", file=sys.stderr)
+            sys.exit(1)
+        print(f"Using --tickers-file ({len(tickers)} tickers) — --top ignored.")
+    else:
+        top_arg = None if args.top == 0 else args.top
+        tickers = get_tickers(conn, top_arg)
+        if not tickers:
+            print("ERROR: No tickers found in database.", file=sys.stderr)
+            sys.exit(1)
 
     print(
         f"Refreshing {len(tickers)} tickers from yfinance "

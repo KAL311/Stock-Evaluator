@@ -2378,10 +2378,26 @@ def compute_liveness_and_flag(df, db_path):
     n_unk = int(counts.get('UNKNOWN', 0))
     n_stale = int(counts.get('STALE', 0))
 
-    if not coverage_ok:
-        print(f'  WARNING: prices_live covers only {coverage*100:.0f}% of scored '
-              f'tickers (< 80%). Not treating absent tickers as DELISTED. '
-              f'Run: python scripts/refreshprice.py --top 0')
+    # Coverage-floor visibility. 80% is the activation threshold for
+    # "absent-as-DELISTED" semantics (kept unchanged); the block below only
+    # adds loud visibility around it. Flag logic itself is untouched.
+    if coverage < 0.80:
+        floor_msg = (
+            f'!!! LIVENESS COVERAGE BELOW FLOOR ({coverage*100:.1f}% < 80%): '
+            f'absent tickers NOT treated as delisted - zombie protection '
+            f'degraded. Run: python scripts/refreshprice.py --top 0 --period 2y'
+        )
+        print(floor_msg, file=sys.stderr)
+        print(f'  {floor_msg}')
+    elif coverage < 0.85:
+        marginal_msg = (
+            f'!! LIVENESS COVERAGE MARGINAL ({coverage*100:.1f}%): near the '
+            f'80% floor - a weaker refresh will disable absent-as-delisted '
+            f'semantics. Consider a fuller refresh: '
+            f'python scripts/refreshprice.py --top 0 --period 2y'
+        )
+        print(marginal_msg, file=sys.stderr)
+        print(f'  {marginal_msg}')
 
     print(f'  Liveness: {n_live} live / {n_del} delisted / {n_unk} unknown '
           f'(+{n_stale} stale-gap) '

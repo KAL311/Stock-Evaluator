@@ -1,6 +1,13 @@
 # Phase 5 OOS Decision Record (2025)
 
-**Frozen commit:** `7082880` (tag `phase5-frozen`)
+> **Tag status (2026-07-08):** `phase5-frozen` tag removed from premature
+> commit `7082880` on 2026-07-08; to be recreated on the commit that
+> fills PERIODS state variables for the 2025 period, per Step 2.5
+> pre-registration.  Remote tag on `origin` still points at `7082880` and
+> requires operator confirmation to delete
+> (`git push origin :refs/tags/phase5-frozen`) — see Prompt-6 audit log.
+
+**Frozen commit:** `7082880` (tag `phase5-frozen`) — **now superseded, tag removed; see status note above**
 **Prior frozen tag:** `phase3-frozen` (6aed4a335aff397c07ae0885eccc558697d398f9), with the Phase 4 diagnostic and the Phase 5 evaluation-layer amendment stacked on top.
 **Date rules written:** 2026-07-07
 **OOS period:** 2025 full year (cutoff 2024-12-31 → forward 2025-12-31)
