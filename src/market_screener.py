@@ -34,6 +34,15 @@ BASE = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE / 'data'
 CACHE_DB = DATA_DIR / 'stock_cache.db'
 SIMFIN_DIR = DATA_DIR / 'simfin'
+# FMP listing oracle path.  Refreshed by scripts/fetch_fmp_listing_status.py;
+# consumed read-only inside compute_liveness_and_flag to override the
+# filing-age heuristic.  Absence of the file makes the gate degrade
+# gracefully to heuristic-only (with a stderr warning).
+FMP_LISTING_STATUS_PATH = DATA_DIR / 'fmp' / 'listing_status.json'
+# A FMP quote timestamp older than this is treated as evidence of delisting
+# (frozen quote); anything newer is treated as evidence of active trading
+# even if this environment's yfinance cannot pull the ticker.
+FMP_QUOTE_ACTIVE_MAX_AGE_DAYS = 180
 sf.set_data_dir(str(SIMFIN_DIR))
 sys.path.insert(0, str(BASE))
 
@@ -2277,17 +2286,86 @@ def _persist_flags_to_cache(df, db_path):
         print(f'  Warning: could not persist flags to cache ({e})')
 
 
+def _load_fmp_listing_oracle():
+    """Load the FMP listing-status cache produced by
+    ``scripts/fetch_fmp_listing_status.py``.  Returns
+    ``(active_set, delisted_set, quote_probes, fetched_at)`` or
+    ``(None, None, None, None)`` if the cache is missing or unreadable
+    (heuristic-only fallback).
+    """
+    try:
+        import json
+        if not FMP_LISTING_STATUS_PATH.exists():
+            return None, None, None, None
+        data = json.loads(FMP_LISTING_STATUS_PATH.read_text())
+        active = {str(s).upper() for s in data.get('active_symbols', []) if s}
+        delisted = {str(s).upper() for s in data.get('delisted_symbols', []) if s}
+        probes = {str(k).upper(): v for k, v in (data.get('quote_probes') or {}).items()}
+        return active, delisted, probes, data.get('fetched_at')
+    except Exception as e:
+        print(f'  FMP oracle: failed to load {FMP_LISTING_STATUS_PATH.name} ({e}); '
+              f'using heuristic only', file=sys.stderr)
+        return None, None, None, None
+
+
+def _oracle_status(ticker, active, delisted, probes, now_ts, max_age_sec):
+    """Return one of 'ACTIVE' | 'DELISTED' | 'UNKNOWN' from the FMP oracle.
+
+    Priority:
+      1. On the FMP delisted list  -> DELISTED (authoritative).
+      2. Fresh quote (ts within max_age)  -> ACTIVE.
+      3. On the active symbol list but no fresh quote  -> UNKNOWN
+         (oracle covers the symbol but cannot confirm liveness -> defer
+         to heuristic).
+      4. Not covered anywhere  -> UNKNOWN.
+
+    Tries both dot and dash forms of the symbol to accommodate share-
+    class formatting differences (e.g. BRK.B vs BRK-B).
+    """
+    if active is None:
+        return 'UNKNOWN'
+    variants = {ticker.upper()}
+    if '.' in ticker:
+        variants.add(ticker.upper().replace('.', '-'))
+    if '-' in ticker:
+        variants.add(ticker.upper().replace('-', '.'))
+    for v in variants:
+        if v in delisted:
+            return 'DELISTED'
+    for v in variants:
+        rec = probes.get(v)
+        if rec and rec.get('ts') is not None:
+            try:
+                age = now_ts - float(rec['ts'])
+            except (TypeError, ValueError):
+                age = None
+            if age is not None and 0 <= age <= max_age_sec:
+                return 'ACTIVE'
+    return 'UNKNOWN'
+
+
 def compute_liveness_and_flag(df, db_path):
-    """Post-scoring liveness gate driven by prices_live (yfinance).
-    Additive, freeze-safe: does NOT touch scoring; only appends DELISTED
-    to the flags column and writes an audit CSV. See docs/price_layer.md.
+    """Post-scoring liveness gate driven by (a) the FMP listing oracle when
+    available and (b) prices_live (yfinance) plus SimFin filing_age as a
+    heuristic fallback.  Additive, freeze-safe: does NOT touch scoring;
+    only appends DELISTED / UNPRICED to the flags column and writes audit
+    CSVs.  See docs/price_layer.md.
+
+    Priority for a ticker that has no recent prices_live entry:
+      1. FMP oracle delisted list  -> DELISTED (authoritative).
+      2. FMP oracle active (fresh quote < 180d)  -> UNPRICED
+         (live but this environment's yfinance cannot resolve it).
+      3. Oracle UNKNOWN  -> heuristic: filing_age > 365 -> DELISTED,
+         else -> UNPRICED.
 
     LIVE     : ticker's last_px within 10 calendar days of prices_live max.
-    DELISTED : ticker's last_px more than 30 days older than table max, OR
-               ticker absent from prices_live when coverage >= 80%.
-    UNKNOWN  : ticker absent AND coverage < 80% (refresh incomplete).
+    DELISTED : oracle-DELISTED OR (no/stale prices_live AND
+               (oracle-UNKNOWN AND filing_age > 365)).
+    UNPRICED : oracle-ACTIVE without prices_live OR (no/stale prices_live
+               AND oracle-UNKNOWN AND recent filing).
+    UNKNOWN  : coverage < 80% and ticker absent (refresh incomplete).
     STALE    : gap 10-30 days (no flag, no exclusion).
-    Empty/missing prices_live → warn and skip.
+    Empty/missing prices_live -> loud stderr WARNING and skip.
     """
     if 'flags' not in df.columns:
         df['flags'] = None
@@ -2356,16 +2434,22 @@ def compute_liveness_and_flag(df, db_path):
     pl_map = dict(zip(pl['ticker'], pl['last_px']))
     coverage_ok = coverage >= 0.80
 
-    # Filing-age corroboration: a ticker with no recent price data is only
-    # classified DELISTED if its most recent SimFin filing is also stale
-    # (filing_age_days > FILING_AGE_DELIST_MIN). A recent filer that this
-    # environment's yfinance cannot resolve is flagged UNPRICED instead
-    # (vendor blind spot suspect) so that a live large-cap is not silently
-    # tagged as dead by a data-fetch quirk. Both flags are still hard-
-    # excluded from portfolios in compute_portfolios; the change is one of
-    # LABEL, not exclusion.
+    # Filing-age is a WEAK discriminator on its own -- the SimFin freeze
+    # makes stale filings unreliable evidence of delisting.  Use the FMP
+    # oracle when available; fall back to the filing-age heuristic only
+    # for tickers FMP does not cover.
     FILING_AGE_DELIST_MIN = 365
     age_map = dict(zip(df['ticker'], df.get('filing_age_days', pd.Series(dtype='float'))))
+
+    active_set, delisted_set, quote_probes, oracle_fetched_at = _load_fmp_listing_oracle()
+    oracle_available = active_set is not None
+    if not oracle_available:
+        print('  FMP oracle: cache missing at '
+              f'{FMP_LISTING_STATUS_PATH.name}; using filing-age heuristic only. '
+              'Run: python scripts/fetch_fmp_listing_status.py', file=sys.stderr)
+    now_ts_epoch = datetime.now().timestamp()
+    max_age_sec = FMP_QUOTE_ACTIVE_MAX_AGE_DAYS * 86400.0
+    oracle_counts = {'ACTIVE': 0, 'DELISTED': 0, 'UNKNOWN': 0}
 
     def _has_stale_filing(t):
         age = age_map.get(t)
@@ -2381,17 +2465,36 @@ def compute_liveness_and_flag(df, db_path):
         except (TypeError, ValueError):
             return True
 
+    def _oracle_lookup(t):
+        if not oracle_available:
+            return 'UNKNOWN'
+        st = _oracle_status(t, active_set, delisted_set, quote_probes,
+                            now_ts_epoch, max_age_sec)
+        oracle_counts[st] = oracle_counts.get(st, 0) + 1
+        return st
+
+    def _resolve_no_price(t):
+        """Ticker has no usable prices_live data. Decide DELISTED vs UNPRICED."""
+        oracle_st = _oracle_lookup(t)
+        if oracle_st == 'DELISTED':
+            return 'DELISTED'
+        if oracle_st == 'ACTIVE':
+            # Oracle confirms trading; yfinance simply cannot resolve it here.
+            return 'UNPRICED'
+        # UNKNOWN: fall back to the filing-age heuristic.
+        return 'DELISTED' if _has_stale_filing(t) else 'UNPRICED'
+
     def _classify(t):
         lp = pl_map.get(t)
         if lp is None:
             if not coverage_ok:
                 return 'UNKNOWN'
-            return 'DELISTED' if _has_stale_filing(t) else 'UNPRICED'
+            return _resolve_no_price(t)
         gap_days = (table_max - lp).days
         if gap_days <= 10:
             return 'LIVE'
         if gap_days > 30:
-            return 'DELISTED' if _has_stale_filing(t) else 'UNPRICED'
+            return _resolve_no_price(t)
         return 'STALE'
 
     df['live_status'] = df['ticker'].map(_classify)
@@ -2428,10 +2531,21 @@ def compute_liveness_and_flag(df, db_path):
         print(marginal_msg, file=sys.stderr)
         print(f'  {marginal_msg}')
 
-    print(f'  Liveness: {n_live} live / {n_del} delisted (corroborated) / '
-          f'{n_unpriced} unpriced (recent filer, vendor blind-spot suspect) / '
+    if oracle_available:
+        oracle_stamp = oracle_fetched_at or '?'
+        print(f'  FMP oracle: fetched_at={oracle_stamp}  '
+              f'active-quote-fresh={oracle_counts["ACTIVE"]}  '
+              f'delisted-authoritative={oracle_counts["DELISTED"]}  '
+              f'unknown-defer-to-heuristic={oracle_counts["UNKNOWN"]}')
+    print(f'  Liveness: {n_live} live / {n_del} delisted (oracle+heuristic) / '
+          f'{n_unpriced} unpriced (active, no local price) / '
           f'{n_unk} unknown (+{n_stale} stale-gap) '
           f'(prices_live coverage {coverage*100:.0f}%, table max {table_max.date()})')
+    if oracle_available and n_unpriced > 10:
+        print(f'  Note: {n_unpriced} UNPRICED names are FMP-confirmed active but '
+              f'absent from prices_live. Consider a secondary price source '
+              f'(e.g. FMP quote refresh, NYSE short-interest CSV) so these live '
+              f'names can enter portfolios.')
 
     def _append_flag(mask, label):
         if not mask.any():

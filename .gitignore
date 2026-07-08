@@ -19,6 +19,9 @@ ruvector.db
 # as the primary run-metadata record.
 data/audit/*.csv
 
+# FMP listing oracle cache (regenerable via scripts/fetch_fmp_listing_status.py)
+data/fmp/
+
 # Rendered HTML reports (regenerable via scripts/generate_html_report.py)
 reports/*.html
 
