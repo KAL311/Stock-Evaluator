@@ -1,0 +1,15 @@
+A/B verification summary — USE_FMP_FUNDAMENTALS off vs on (MEASURED)
+======================================================================
+tickers scored on both paths: 2157
+  valuation_score      n=2157  rho=0.9722  mean|delta|=  2.33  median|delta|=  0.63
+  quality_score        n=2134  rho=0.9518  mean|delta|=  2.85  median|delta|=  1.07
+  growth_score         n=1724  rho=0.9430  mean|delta|=  3.65  median|delta|=  1.12
+  sentiment_score      n=2157  rho=1.0000  mean|delta|=  0.00  median|delta|=  0.00
+  potential_score      n=2157  rho=0.9679  mean|delta|=  1.55  median|delta|=  0.59
+
+Decile migration: 20.4%   within ±1 decile: 96.2%
+Top-decile Jaccard: 0.7633  |A|=216  |B|=216  overlap=187
+Names ENTERING top decile under B (not in A) — 29:
+  ANF, APH, CPE, CSCO, CTT, DORM, EAT, ENSG, EPRT, GIII, HOOD, HSAI, HST, HTGC, IBRX, IMAX, KTB, LRCX, LYV, MPLX, NFLX, NTNX, NWE, OC, PVAC, SIGA, TPR, TRIN, VERV
+Names LEAVING top decile under B (in A but not B) — 29:
+  ABG, ADP, AGX, AMPH, AN, BBIO, BMI, BMY, CME, CPRI, DRQ, DX, FHI, G, GAMB, HGV, MASI, PAG, PEN, PR, RDVT, RH, RITM, SBTX, SGFY, STLA, STM, SWTX, WDFC

@@ -1,0 +1,147 @@
+C:\Users\fraun\OneDrive\Documents\Stock Evaluator\src\fmp_mapping.py:363: FutureWarning: Setting an item of incompatible dtype is deprecated and will raise an error in a future version of pandas. Value '[-265912000 109934000 -5280000 ... 2114000000 2344000000 2486000000]' has dtype incompatible with int64, please explicitly cast to a compatible dtype first.
+  sf_flat.loc[overlap_idx, col] = fmp_indexed.loc[overlap_idx, col]
+C:\Users\fraun\OneDrive\Documents\Stock Evaluator\src\fmp_mapping.py:386: FutureWarning: The behavior of DataFrame concatenation with empty or all-NA entries is deprecated. In a future version, this will no longer exclude empty or all-NA columns when determining the result dtypes. To retain the old behavior, exclude the relevant entries before the concat operation.
+  combined = pd.concat([sf_reset[all_cols], fmp_only[all_cols]], ignore_index=True)
+C:\Users\fraun\OneDrive\Documents\Stock Evaluator\src\fmp_mapping.py:386: FutureWarning: The behavior of DataFrame concatenation with empty or all-NA entries is deprecated. In a future version, this will no longer exclude empty or all-NA columns when determining the result dtypes. To retain the old behavior, exclude the relevant entries before the concat operation.
+  combined = pd.concat([sf_reset[all_cols], fmp_only[all_cols]], ignore_index=True)
+C:\Users\fraun\OneDrive\Documents\Stock Evaluator\src\fmp_mapping.py:386: FutureWarning: The behavior of DataFrame concatenation with empty or all-NA entries is deprecated. In a future version, this will no longer exclude empty or all-NA columns when determining the result dtypes. To retain the old behavior, exclude the relevant entries before the concat operation.
+  combined = pd.concat([sf_reset[all_cols], fmp_only[all_cols]], ignore_index=True)
+  §Stage2.5 factor-decay loaded (2026-05-26T12:25:30, n_periods=6)
+    lambdas: {'valuation': 0.5611238665754277, 'quality': 0.5870369397450694, 'growth': 0.10033293453620953, 'sentiment': 0.0}
+    POTENTIAL_WEIGHTS: {'valuation': 0.4, 'quality': 0.4, 'growth': 0.2, 'sentiment': 0.0} -> {'valuation': 0.371, 'quality': 0.365, 'growth': 0.263, 'sentiment': 0.0}
+
+===== A/B verification: USE_FMP_FUNDAMENTALS off vs on =====
+  max_fiscal_year: 2024
+
+  Loading SimFin bulk data (shared between both runs)...
+  Loading companies...
+Dataset "us-companies" on disk (3 days old).
+- Loading from disk ... Done!
+    6588 companies
+  Loading industries...
+Dataset "industries" on disk (3 days old).
+- Loading from disk ... Done!
+    74 industries
+  Loading annual income statements...
+Dataset "us-income-annual" on disk (3 days old).
+- Loading from disk ... Done!
+    16976 rows
+  Loading annual balance sheets...
+Dataset "us-balance-annual" on disk (3 days old).
+- Loading from disk ... Done!
+    16976 rows
+  Loading annual cash flow...
+Dataset "us-cashflow-annual" on disk (3 days old).
+- Loading from disk ... Done!
+    16974 rows
+  Loading quarterly income statements...
+Dataset "us-income-quarterly" on disk (3 days old).
+- Loading from disk ... Done!
+    49726 rows
+  Loading quarterly cash flow...
+Dataset "us-cashflow-quarterly" on disk (3 days old).
+- Loading from disk ... Done!
+    49731 rows
+  Loading daily share prices...
+Dataset "us-shareprices-daily" on disk (3 days old).
+- Loading from disk ... Done!
+    6229137 rows
+
+  Computing non-fundamental inputs (prices/momentum/TTM/etc.)...
+  Computing Beta from daily returns (cap-weighted proxy)...
+    5397 tickers with return data
+    Filtered 842 extreme daily returns (>100%)
+    Computed Beta for 5258 tickers
+    Computed realized volatility for 5313 tickers
+  Computing 52-week high/low...
+    Computed 52w high/low for 5129 tickers
+  Computing price momentum and 52w distance...
+    Computed momentum for 5819 tickers
+  Computing median daily dollar volume (trailing 30d)...
+    Computed liquidity for 5855 tickers
+  Computing TTM (trailing twelve months)...
+    Computed TTM for 3006 tickers
+    Computed quarterly YoY revenue growth for 2524 tickers
+  Using default 10yr Treasury: 4.50%
+
+  === Run A (SimFin baseline) — history + snapshot + score ===
+  Computing multi-year history metrics...
+    Computed history metrics for 4388 tickers
+    hist_a: 4388 tickers
+  Building stock snapshot...
+    Processed 1000/6588
+    Processed 1500/6588
+    Processed 2500/6588
+    Processed 3000/6588
+    Processed 3500/6588
+    Processed 5000/6588
+    Processed 2514 stocks (Market Cap > $300,000,000, Min Daily Vol $1,000,000)
+    0 tickers have unknown filing date (defaulted to stale)
+
+  Unmapped industries (13 stocks total):
+      13  nan
+    df_a: 2514 rows
+  Computing v2 potential scores (sub-industry ranked)...
+    §Stage2.5 v2 decay mults: V=0.641 Q=0.630 G=0.909 S=1.000
+    §Stage1.1 v2 resampled: 1000 draws, 184 robust top-decile
+    §Stage1.3 v2 impact haircut: 2319 stocks avg=73bps max=817bps
+    §Stage2.6 v2 crowding: 27 stocks held by >=2 of 4 factor ETFs
+    Dropped 357 stocks in small rank groups (<30)
+    Scored 2157/2514 stocks
+
+  === Run B (FMP annual + SimFin fallback) — history + snapshot + score ===
+  FMP fundamentals: merged 18268 income, 18263 balance, 18265 cashflow rows
+  FMP fundamentals: mixed-source-history tickers 56/4390 (1.3%). Piotroski f_liquidity may be corrupted on these.
+    e.g. ADSK: ['SF', 'FMP', 'FMP', 'FMP', 'FMP']
+    e.g. AGX: ['SF', 'FMP', 'FMP', 'FMP', 'FMP']
+    e.g. APOG: ['SF', 'FMP', 'FMP', 'FMP', 'FMP']
+    e.g. APPS: ['SF', 'FMP', 'FMP', 'FMP', 'FMP']
+    e.g. AZZ: ['SF', 'FMP', 'FMP', 'FMP', 'FMP']
+    e.g. BAH: ['SF', 'FMP', 'FMP', 'FMP', 'FMP']
+    e.g. BB: ['SF', 'FMP', 'FMP', 'FMP', 'FMP']
+    e.g. CDMO: ['FMP', 'FMP', 'FMP', 'FMP', 'SF']
+    e.g. CPRI: ['SF', 'FMP', 'FMP', 'FMP', 'FMP']
+    e.g. CRM: ['SF', 'FMP', 'FMP', 'FMP', 'FMP']
+  Computing multi-year history metrics...
+    Computed history metrics for 4388 tickers
+    hist_b: 4388 tickers
+  Building stock snapshot...
+    Processed 1000/6588
+    Processed 1500/6588
+    Processed 2500/6588
+    Processed 3000/6588
+    Processed 3500/6588
+    Processed 5000/6588
+    Processed 2514 stocks (Market Cap > $300,000,000, Min Daily Vol $1,000,000)
+    0 tickers have unknown filing date (defaulted to stale)
+
+  Unmapped industries (13 stocks total):
+      13  nan
+    df_b: 2514 rows
+  Computing v2 potential scores (sub-industry ranked)...
+    §Stage2.5 v2 decay mults: V=0.641 Q=0.630 G=0.909 S=1.000
+    §Stage1.1 v2 resampled: 1000 draws, 185 robust top-decile
+    §Stage1.3 v2 impact haircut: 2319 stocks avg=73bps max=817bps
+    §Stage2.6 v2 crowding: 27 stocks held by >=2 of 4 factor ETFs
+    Dropped 357 stocks in small rank groups (<30)
+    Scored 2157/2514 stocks
+  TTM-invariance check: ev_ebitda_ttm identical on 51.76% of 1082 rows
+
+  Wrote C:\Users\fraun\OneDrive\Documents\Stock Evaluator\data\fmp\ab_verify_results.csv — 2514 tickers
+A/B verification summary — USE_FMP_FUNDAMENTALS off vs on (MEASURED)
+======================================================================
+tickers scored on both paths: 2157
+  valuation_score      n=2157  rho=0.9722  mean|delta|=  2.33  median|delta|=  0.63
+  quality_score        n=2134  rho=0.9518  mean|delta|=  2.85  median|delta|=  1.07
+  growth_score         n=1724  rho=0.9430  mean|delta|=  3.65  median|delta|=  1.12
+  sentiment_score      n=2157  rho=1.0000  mean|delta|=  0.00  median|delta|=  0.00
+  potential_score      n=2157  rho=0.9679  mean|delta|=  1.55  median|delta|=  0.59
+
+Decile migration: 20.4%   within ±1 decile: 96.2%
+Top-decile Jaccard: 0.7633  |A|=216  |B|=216  overlap=187
+Names ENTERING top decile under B (not in A) — 29:
+  ANF, APH, CPE, CSCO, CTT, DORM, EAT, ENSG, EPRT, GIII, HOOD, HSAI, HST, HTGC, IBRX, IMAX, KTB, LRCX, LYV, MPLX, NFLX, NTNX, NWE, OC, PVAC, SIGA, TPR, TRIN, VERV
+Names LEAVING top decile under B (in A but not B) — 29:
+  ABG, ADP, AGX, AMPH, AN, BBIO, BMI, BMY, CME, CPRI, DRQ, DX, FHI, G, GAMB, HGV, MASI, PAG, PEN, PR, RDVT, RH, RITM, SBTX, SGFY, STLA, STM, SWTX, WDFC
+
+  Wrote C:\Users\fraun\OneDrive\Documents\Stock Evaluator\data\fmp\ab_verify_summary.txt
