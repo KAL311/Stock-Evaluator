@@ -181,3 +181,108 @@ py -3 scripts/parity_study_a.py --tickers-file data/fmp/parity_a_sample_tickers.
 ```
 
 Raw JSON cache under `data/fmp/raw/` makes re-runs free.
+
+---
+
+## A-vs-B decision evidence (diagnostic run, no migration)
+
+Two cheap checks to move the A/B choice off judgment and onto data. Reused the existing harness and already-fetched FMP data; no mapper changes, no scoring/loader/backtest/weight edits. Grep-verified frozen files clean.
+
+### Check 1 — Does the cur_liab gap flip any HARD gates?
+
+Framework hard-exclude cutoffs (confirmed in `src/market_screener.py:1926-1933` and `:3743-3745`):
+- **Altman Z < 1.81** → distress exclude within value-trap gate.
+- **Piotroski F < 5** → weak-fundamentals exclude within value-trap gate.
+
+Two variants measured:
+
+**Variant (a) — all-SimFin vs all-FMP** (composite effect: ALL fields differ, not just cur_liab). This is the operational number for a full FMP swap.
+
+| Gate | Total flips | Top-decile flips | Top-quintile flips |
+|---|---|---|---|
+| Altman Z < 1.81 | 49 / 875 | **7** | 12 |
+| Piotroski F < 5 | 75 / 877 | **12** | 18 |
+
+Top-quintile Altman flips (a): AGNC, AN, CL, CPRI, CSCO, CWEN, DX, FOUR, PAG, PANW, RH, YOU.
+Top-quintile Piotroski flips (a): AGX, ALTM, AN, CPRI, CRWD, DT, DUK, FLT, FROG, HTGC, JFIN, MASI, MOV, PAG, RH, STLA, STM, VEC.
+
+**Variant (b) — ISOLATED cur_liab swap** (SimFin data everywhere BUT cur_liab from FMP). This is the pure Option-A-target: what closing the cur_liab gap alone would prevent.
+
+| Gate | Total flips | Top-decile flips | Top-quintile flips |
+|---|---|---|---|
+| Altman Z < 1.81 | 30 / 878 | **3** | 5 |
+| Piotroski F < 5 | 10 / 879 | **0** | **0** |
+
+Top-quintile flips (b, isolated cur_liab): Altman = CSCO, PANW, AGNC, TCOM, JFIN; Piotroski = none.
+
+**Reading:**
+- Cur_liab alone drives **60% of Altman flips** (30/49) — genuine dominant Altman driver.
+- Cur_liab alone drives **only 13% of Piotroski flips** (10/75) — most Piotroski drift comes from other fields (revenue growth / ROA delta / coverage-window shifts).
+- Portfolio-relevant (top-decile) flips ATTRIBUTABLE TO cur_liab: **3 Altman, 0 Piotroski. Total: 3 top-decile names** at risk from the definitional gap alone.
+
+Diagnostic CSV: `data/fmp/parity_a_curliab_iso.csv`.
+
+### Check 2 — Does the Option-A reconstruction actually reproduce SimFin?
+
+Three reconstruction variants tested against 898 sample tickers with both SimFin and FMP FY2024 balance sheets:
+
+- **V1 (agent's proposed formula):** `accountPayables + shortTermDebt + capitalLeaseObligationsCurrent + taxPayables`
+- **V2 (naive subtract):** `totalCurrentLiabilities - deferredRevenue`
+- **V3 (aggressive subtract):** `totalCurrentLiabilities - (deferredRevenue + accruedExpenses + otherCurrentLiabilities)`
+
+Compared to SimFin `Total Current Liabilities`:
+
+| Variant | median \|%diff\| | mean \|%diff\| | within ±2% | within ±5% |
+|---|---|---|---|---|
+| **FMP orig (no reconstruction)** | **0.00%** | 34.68% | **67.8%** | **73.3%** |
+| V1 (AP+STD+CLO_cur+taxPayables) | 58.19% | 71.31% | 0.6% | 1.2% |
+| V2 (subtract deferredRevenue) | 7.59% | 43.33% | 34.1% | 42.3% |
+| V3 (subtract DR+AE+OCL) | 55.39% | 69.23% | 1.0% | 1.8% |
+
+**The agent-proposed V1 formula is dramatically WORSE than the current mapping.** V1 has median 58% error and only 0.6% of tickers within ±2%. Component detail from top-5 V1 worst mismatches:
+
+- **WIT** (SimFin 1.4B, V1 133B): missing items — FMP `totalPayables` (45B), `accruedExpenses` (66B), `otherCurrentLiabilities` (34B) contribute to SimFin's number but V1 excludes them.
+- **NIO** (SimFin 8.7B, V1 46B): same pattern — component fields exclude the bulk that SimFin includes.
+- **TCOM** (SimFin 10.3B, V1 38B): FMP `accountPayables` alone is 17B — SimFin apparently uses a much narrower definition on ADRs than on US filers.
+- **AGNC, OHI, VICI, NNN, INVA** (V1 = 0 or grossly wrong): REITs / financials / small biotechs where FMP splits current-liab components differently or leaves them null.
+
+**V2 (subtract deferredRevenue)** is second best but still much worse than the current FMP mapping — median 7.6% error, only 34% within ±2%.
+
+**V3** is as bad as V1.
+
+**FMP's `totalCurrentLiabilities` as-shipped IS the best available proxy for SimFin.** The -6.6% AAPL drift is an outlier at the tail — median across the sample is 0.0% and 67.8% match within ±2%. The 27% >5% tail concentrates on: REITs, financial firms, foreign ADRs (WIT, NIO, TCOM, HSAI, NTES), small biotechs — segments where SimFin's narrower current-liab definition materially differs from FMP's broader roll-up. Not fixable with a linear combination of FMP fields.
+
+Diagnostic CSV: `data/fmp/parity_a_recon.csv`.
+
+### Recommendation matrix
+
+Using the pre-committed rules and the measured evidence above:
+
+| Condition | Verdict |
+|---|---|
+| Gate flips ≈ 0 → Option B | **Not this case.** Cur_liab-isolated Altman flips: 30 total, 3 top-decile. Portfolio-relevant. |
+| Gate flips non-trivial AND reconstruction matches within ~2% → Option A | **NOT met.** Reconstruction V1 median error 58%, within ±2% share 0.6%. V2 median 7.6%, within ±2% share 34%. Neither reliable. |
+| Gate flips non-trivial BUT reconstruction unreliable → operator tradeoff, consider hybrid | **This case.** |
+
+**Neither Option A nor Option B alone is clean. Present both to operator plus a hybrid:**
+
+- **Option A (RECONSTRUCT cur_liab from FMP components).**
+  Rejected on evidence: V1 formula degrades the mapping (median error 58% vs FMP-orig 0%). V2 partial improvement in tail but median error 7.6% — worse than the current mapping. No linear combination of exposed FMP fields reliably reproduces SimFin.
+
+- **Option B (ACCEPT drift, ship FMP with a model-change note).**
+  Feasible with caveat: 3 top-decile names (PANW, TCOM, JFIN in the ISOLATED cur_liab test — the specific names would shift on any full-universe rerun) may cross the Altman Z < 1.81 gate under FMP that would not have under SimFin. All are large-caps or growth names, not obvious value-traps. Piotroski F gate is essentially unaffected by cur_liab alone (0 top-decile flips). This is a real but bounded model change.
+
+- **Hybrid (RECOMMENDED FOR OPERATOR CONSIDERATION — but still not auto-picked).**
+  Use FMP for all fundamentals EXCEPT `Total Current Liabilities`, which continues to be sourced from SimFin. This preserves the Piotroski / Altman gate inputs at the current mapping accuracy, at the cost of retaining a SimFin dependency for that one field. Concretely: `src/fmp_mapping.py:map_balance` would need to accept an optional SimFin cur_liab override; the harness would merge it before scoring. Adds one column of coupling to SimFin instead of a full definitional rewrite.
+
+**Operator decides.** Evidence supports rejecting A on the reconstruction data alone. Choice is between B (accept 3 top-decile Altman flips as a documented model change) and hybrid (retain SimFin cur_liab dependency to keep gate inputs identical).
+
+### Frozen-file guard (this diagnostic run)
+
+`git diff --name-only src/market_screener.py scripts/backtest.v2.py` returns empty. No weights / regime / decay files touched.
+
+### Additional artifacts (from this diagnostic run)
+
+- `data/fmp/parity_a_curliab_iso.csv` — per-ticker Altman Z + Piotroski F under baseline SimFin vs FMP cur_liab swap, with SimFin decile.
+- `data/fmp/parity_a_recon.csv` — per-ticker SimFin cur_liab vs FMP orig + V1 + V2 + V3 reconstruction variants and percent errors.
+
