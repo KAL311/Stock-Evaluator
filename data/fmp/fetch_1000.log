@@ -1,0 +1,44 @@
+Fetching 1000 tickers × 3 statements × 6y annual (rate cap 250/min)
+  Raw cache dir: C:\Users\fraun\OneDrive\Documents\Stock Evaluator\data\fmp\raw
+  Output dir:    C:\Users\fraun\OneDrive\Documents\Stock Evaluator\data\fmp
+  Concurrency: 6 threads, token bucket 250/min
+  [  100/3000] api=100 cache=0 bytes=0.9MB elapsed=3.8s rate=1585/min fails=0 | calls=100 200=100 429=0 404=0 5xx=0 other=0 lat_avg=218ms p50=189ms p95=281ms
+  [  200/3000] api=200 cache=0 bytes=1.8MB elapsed=7.8s rate=1535/min fails=0 | calls=200 200=200 429=0 404=0 5xx=0 other=0 lat_avg=225ms p50=189ms p95=309ms
+  [  300/3000] api=300 cache=0 bytes=2.7MB elapsed=62.0s rate=290/min fails=0 | calls=300 200=300 429=0 404=0 5xx=0 other=0 lat_avg=235ms p50=189ms p95=309ms
+  [  400/3000] api=400 cache=0 bytes=3.6MB elapsed=65.7s rate=366/min fails=0 | calls=400 200=400 429=0 404=0 5xx=0 other=0 lat_avg=228ms p50=189ms p95=281ms
+  [  500/3000] api=500 cache=0 bytes=4.5MB elapsed=71.6s rate=419/min fails=0 | calls=500 200=500 429=0 404=0 5xx=0 other=0 lat_avg=236ms p50=189ms p95=309ms
+  [  600/3000] api=600 cache=0 bytes=5.4MB elapsed=123.9s rate=291/min fails=0 | calls=600 200=600 429=0 404=0 5xx=0 other=0 lat_avg=232ms p50=189ms p95=281ms
+  [  700/3000] api=697 cache=0 bytes=6.3MB elapsed=127.8s rate=329/min fails=3 | calls=700 200=700 429=0 404=0 5xx=0 other=0 lat_avg=230ms p50=189ms p95=299ms
+  [  800/3000] api=797 cache=0 bytes=7.2MB elapsed=182.2s rate=263/min fails=3 | calls=800 200=800 429=0 404=0 5xx=0 other=0 lat_avg=230ms p50=190ms p95=281ms
+  [  900/3000] api=897 cache=0 bytes=8.2MB elapsed=185.8s rate=291/min fails=3 | calls=900 200=900 429=0 404=0 5xx=0 other=0 lat_avg=227ms p50=190ms p95=270ms
+  [ 1000/3000] api=997 cache=0 bytes=9.1MB elapsed=190.2s rate=315/min fails=3 | calls=1000 200=1000 429=0 404=0 5xx=0 other=0 lat_avg=226ms p50=190ms p95=264ms
+  [ 1100/3000] api=1097 cache=0 bytes=10.0MB elapsed=244.1s rate=270/min fails=3 | calls=1100 200=1100 429=0 404=0 5xx=0 other=0 lat_avg=224ms p50=190ms p95=264ms
+  [ 1200/3000] api=1197 cache=0 bytes=10.9MB elapsed=248.3s rate=290/min fails=3 | calls=1200 200=1200 429=0 404=0 5xx=0 other=0 lat_avg=226ms p50=191ms p95=272ms
+  [ 1300/3000] api=1297 cache=0 bytes=11.8MB elapsed=302.3s rate=258/min fails=3 | calls=1300 200=1300 429=0 404=0 5xx=0 other=0 lat_avg=225ms p50=191ms p95=270ms
+  [ 1400/3000] api=1397 cache=0 bytes=12.7MB elapsed=306.0s rate=275/min fails=3 | calls=1400 200=1400 429=0 404=0 5xx=0 other=0 lat_avg=224ms p50=191ms p95=267ms
+  [ 1500/3000] api=1497 cache=0 bytes=13.6MB elapsed=310.3s rate=290/min fails=3 | calls=1500 200=1500 429=0 404=0 5xx=0 other=0 lat_avg=222ms p50=191ms p95=260ms
+  [ 1600/3000] api=1597 cache=0 bytes=14.5MB elapsed=364.2s rate=264/min fails=3 | calls=1600 200=1600 429=0 404=0 5xx=0 other=0 lat_avg=222ms p50=191ms p95=261ms
+  [ 1700/3000] api=1697 cache=0 bytes=15.4MB elapsed=368.1s rate=277/min fails=3 | calls=1701 200=1701 429=0 404=0 5xx=0 other=0 lat_avg=221ms p50=191ms p95=261ms
+  [ 1800/3000] api=1797 cache=0 bytes=16.4MB elapsed=422.5s rate=256/min fails=3 | calls=1800 200=1800 429=0 404=0 5xx=0 other=0 lat_avg=221ms p50=191ms p95=264ms
+  [ 1900/3000] api=1896 cache=0 bytes=17.2MB elapsed=426.2s rate=268/min fails=4 | calls=1900 200=1900 429=0 404=0 5xx=0 other=0 lat_avg=219ms p50=191ms p95=260ms
+  [ 2000/3000] api=1994 cache=0 bytes=18.1MB elapsed=430.3s rate=279/min fails=6 | calls=2000 200=2000 429=0 404=0 5xx=0 other=0 lat_avg=219ms p50=191ms p95=257ms
+  [ 2100/3000] api=2094 cache=0 bytes=19.0MB elapsed=484.2s rate=260/min fails=6 | calls=2100 200=2100 429=0 404=0 5xx=0 other=0 lat_avg=218ms p50=191ms p95=253ms
+  [ 2200/3000] api=2195 cache=0 bytes=20.0MB elapsed=488.2s rate=270/min fails=6 | calls=2202 200=2202 429=0 404=0 5xx=0 other=0 lat_avg=218ms p50=191ms p95=252ms
+  [ 2300/3000] api=2294 cache=0 bytes=20.9MB elapsed=542.6s rate=254/min fails=6 | calls=2300 200=2300 429=0 404=0 5xx=0 other=0 lat_avg=218ms p50=191ms p95=252ms
+  [ 2400/3000] api=2394 cache=0 bytes=21.8MB elapsed=546.3s rate=264/min fails=6 | calls=2400 200=2400 429=0 404=0 5xx=0 other=0 lat_avg=217ms p50=191ms p95=252ms
+  [ 2500/3000] api=2494 cache=0 bytes=22.7MB elapsed=550.6s rate=272/min fails=6 | calls=2500 200=2500 429=0 404=0 5xx=0 other=0 lat_avg=217ms p50=191ms p95=252ms
+  [ 2600/3000] api=2594 cache=0 bytes=23.6MB elapsed=604.5s rate=258/min fails=6 | calls=2600 200=2600 429=0 404=0 5xx=0 other=0 lat_avg=217ms p50=191ms p95=251ms
+  [ 2700/3000] api=2694 cache=0 bytes=24.5MB elapsed=608.3s rate=266/min fails=6 | calls=2700 200=2700 429=0 404=0 5xx=0 other=0 lat_avg=217ms p50=191ms p95=253ms
+  [ 2800/3000] api=2794 cache=0 bytes=25.4MB elapsed=662.7s rate=253/min fails=6 | calls=2800 200=2800 429=0 404=0 5xx=0 other=0 lat_avg=218ms p50=191ms p95=252ms
+  [ 2900/3000] api=2894 cache=0 bytes=26.3MB elapsed=666.4s rate=261/min fails=6 | calls=2900 200=2900 429=0 404=0 5xx=0 other=0 lat_avg=217ms p50=191ms p95=251ms
+  [ 3000/3000] api=2994 cache=0 bytes=27.2MB elapsed=670.6s rate=268/min fails=6 | calls=3000 200=3000 429=0 404=0 5xx=0 other=0 lat_avg=217ms p50=191ms p95=251ms
+
+Emitting long-format CSVs...
+  fundamentals_income.csv: 5972 rows  (998 tickers)
+  fundamentals_balance.csv: 5966 rows  (998 tickers)
+  fundamentals_cashflow.csv: 5971 rows  (998 tickers)
+
+6 (ticker,stmt) failures logged: C:\Users\fraun\OneDrive\Documents\Stock Evaluator\data\fmp\fetch_failures.log
+
+Done. api_calls=2994 cache_hits=0 total_bytes_from_api=27.2MB (0.027GB of 20GB monthly cap) elapsed=670.9s effective_rate=268/min
+  Latency: calls=3000 200=3000 429=0 404=0 5xx=0 other=0 lat_avg=217ms p50=191ms p95=251ms

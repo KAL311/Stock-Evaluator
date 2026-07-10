@@ -38,10 +38,12 @@ import os
 import random
 import sqlite3
 import sys
+import threading
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -79,43 +81,110 @@ def load_api_key() -> str | None:
 
 
 class RateLimiter:
-    """Token-bucket. 250 calls / 60s window."""
+    """Thread-safe token-bucket. Default 250 calls / 60s window."""
 
     def __init__(self, max_per_min: int = 250):
         self.max = max_per_min
-        self.window = []  # timestamps of recent calls
+        self.window: list[float] = []  # timestamps of recent calls
+        self.lock = threading.Lock()
 
     def acquire(self):
-        now = time.monotonic()
-        self.window = [t for t in self.window if now - t < 60]
-        if len(self.window) >= self.max:
-            sleep_for = 60 - (now - self.window[0]) + 0.05
-            if sleep_for > 0:
-                time.sleep(sleep_for)
-        self.window.append(time.monotonic())
+        with self.lock:
+            now = time.monotonic()
+            self.window = [t for t in self.window if now - t < 60]
+            if len(self.window) >= self.max:
+                sleep_for = 60 - (now - self.window[0]) + 0.05
+                if sleep_for > 0:
+                    # release lock during sleep so other threads can also queue
+                    self.lock.release()
+                    try:
+                        time.sleep(sleep_for)
+                    finally:
+                        self.lock.acquire()
+                    # After sleep, refresh window
+                    now = time.monotonic()
+                    self.window = [t for t in self.window if now - t < 60]
+            self.window.append(time.monotonic())
 
 
-def fmp_get(path: str, params: dict, key: str, limiter: RateLimiter) -> tuple[int, object]:
+# Global latency stats (accumulated across concurrent workers).
+class LatencyStats:
+    def __init__(self):
+        self.samples: list[float] = []
+        self.n_200 = 0
+        self.n_429 = 0
+        self.n_404 = 0
+        self.n_5xx = 0
+        self.n_other = 0
+        self.lock = threading.Lock()
+
+    def record(self, dt: float, status: int):
+        with self.lock:
+            self.samples.append(dt)
+            if status == 200:
+                self.n_200 += 1
+            elif status == 429:
+                self.n_429 += 1
+            elif status == 404:
+                self.n_404 += 1
+            elif 500 <= status < 600:
+                self.n_5xx += 1
+            else:
+                self.n_other += 1
+
+    def summary(self) -> str:
+        with self.lock:
+            if not self.samples:
+                return "no calls yet"
+            s = sorted(self.samples)
+            n = len(s)
+            avg = sum(s) / n
+            p50 = s[n // 2]
+            p95 = s[min(n - 1, int(n * 0.95))]
+            return (
+                f"calls={n} 200={self.n_200} 429={self.n_429} 404={self.n_404} "
+                f"5xx={self.n_5xx} other={self.n_other} "
+                f"lat_avg={avg*1000:.0f}ms p50={p50*1000:.0f}ms p95={p95*1000:.0f}ms"
+            )
+
+
+def fmp_get(
+    path: str, params: dict, key: str, limiter: RateLimiter,
+    stats: "LatencyStats | None" = None,
+) -> tuple[int, object]:
     """GET with rate-limit + retry. Returns (status, json_or_None).
-    Status -1 means transport error after retries."""
+    Status -1 means transport error after retries.
+    Fast-fail on 404 (endpoint not found for this symbol) — no retry."""
     p = dict(params)
     p["apikey"] = key
     url = FMP_BASE + path + "?" + urllib.parse.urlencode(p)
     for attempt in range(MAX_RETRIES):
         limiter.acquire()
+        t0 = time.perf_counter()
         try:
             with urllib.request.urlopen(url, timeout=TIMEOUT) as r:
                 data = json.load(r)
+                dt = time.perf_counter() - t0
+                if stats is not None:
+                    stats.record(dt, r.status)
                 return r.status, data
         except urllib.error.HTTPError as e:
+            dt = time.perf_counter() - t0
+            if stats is not None:
+                stats.record(dt, e.code)
             if e.code == 429:
-                time.sleep((2 ** attempt) + random.uniform(0, 0.5))
+                # tighter cap: 250/min bucket + up to 2s jitter is plenty
+                time.sleep(1.0 + random.uniform(0, 1.0))
                 continue
             if 500 <= e.code < 600:
                 time.sleep((1.5 ** attempt) + random.uniform(0, 0.5))
                 continue
+            # 4xx (403, 404, etc.) — do not retry, endpoint or ticker is not available.
             return e.code, None
         except (urllib.error.URLError, TimeoutError, ConnectionError):
+            dt = time.perf_counter() - t0
+            if stats is not None:
+                stats.record(dt, -1)
             time.sleep((1.5 ** attempt) + random.uniform(0, 0.5))
             continue
     return -1, None
@@ -135,7 +204,8 @@ def alt_ticker(t: str) -> str | None:
 
 
 def fetch_statement_cached(
-    ticker: str, stmt_name: str, path: str, years: int, key: str, limiter: RateLimiter
+    ticker: str, stmt_name: str, path: str, years: int, key: str,
+    limiter: RateLimiter, stats: "LatencyStats | None" = None,
 ) -> tuple[list | None, int, bool]:
     """Return (data, bytes_added, from_cache)."""
     RAW_DIR.mkdir(parents=True, exist_ok=True)
@@ -146,13 +216,15 @@ def fetch_statement_cached(
         except json.JSONDecodeError:
             cache_file.unlink()
 
-    st, data = fmp_get(path, {"symbol": ticker, "period": "annual", "limit": years}, key, limiter)
+    st, data = fmp_get(
+        path, {"symbol": ticker, "period": "annual", "limit": years}, key, limiter, stats
+    )
     if st != 200 or not isinstance(data, list) or not data:
-        # Try fallback ticker form once
+        # Try fallback ticker form once (dash↔dot share-class swap)
         alt = alt_ticker(ticker)
         if alt:
             st2, data2 = fmp_get(
-                path, {"symbol": alt, "period": "annual", "limit": years}, key, limiter
+                path, {"symbol": alt, "period": "annual", "limit": years}, key, limiter, stats
             )
             if st2 == 200 and isinstance(data2, list) and data2:
                 data = data2
@@ -232,6 +304,13 @@ def main():
         default=250,
         help="Cap calls per minute (Starter hard limit 300).",
     )
+    ap.add_argument(
+        "--workers",
+        type=int,
+        default=6,
+        help="ThreadPoolExecutor size. 4-6 sits under FMP's server-side "
+             "concurrency ceiling; ≥16 chokes.",
+    )
     args = ap.parse_args()
 
     key = load_api_key()
@@ -254,35 +333,50 @@ def main():
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     RAW_DIR.mkdir(parents=True, exist_ok=True)
     limiter = RateLimiter(args.rate_per_min)
+    stats = LatencyStats()
 
-    records = {name: {} for name, _ in STATEMENTS}
+    records: dict[str, dict[str, list]] = {name: {} for name, _ in STATEMENTS}
+    records_lock = threading.Lock()
     failures: list[tuple[str, str]] = []
-    bytes_fetched = 0
-    cache_hits = 0
-    api_calls = 0
+    fail_lock = threading.Lock()
+    counters = {"bytes": 0, "cache": 0, "api": 0}
+    counters_lock = threading.Lock()
 
-    t0 = time.time()
-    for i, tk in enumerate(tickers, 1):
-        for stmt, path in STATEMENTS:
-            data, nbytes, from_cache = fetch_statement_cached(
-                tk, stmt, path, args.years, key, limiter
-            )
-            if data is None:
-                failures.append((tk, stmt))
-                continue
-            records[stmt][tk] = data
-            bytes_fetched += nbytes
+    def _one(ticker: str, stmt: str, path: str):
+        data, nbytes, from_cache = fetch_statement_cached(
+            ticker, stmt, path, args.years, key, limiter, stats
+        )
+        if data is None:
+            with fail_lock:
+                failures.append((ticker, stmt))
+            return
+        with records_lock:
+            records[stmt][ticker] = data
+        with counters_lock:
+            counters["bytes"] += nbytes
             if from_cache:
-                cache_hits += 1
+                counters["cache"] += 1
             else:
-                api_calls += 1
-        if i % 25 == 0 or i == len(tickers):
-            el = time.time() - t0
-            print(
-                f"  [{i:>4}/{len(tickers)}] {tk:<8} api_calls={api_calls} "
-                f"cache_hits={cache_hits} bytes={bytes_fetched/1e6:.1f}MB "
-                f"elapsed={el:.1f}s fails={len(failures)}"
-            )
+                counters["api"] += 1
+
+    print(f"  Concurrency: {args.workers} threads, token bucket {args.rate_per_min}/min")
+    t0 = time.time()
+    jobs = [(tk, stmt, path) for tk in tickers for stmt, path in STATEMENTS]
+    done = 0
+    with ThreadPoolExecutor(max_workers=args.workers) as ex:
+        futures = {ex.submit(_one, *j): j for j in jobs}
+        for fut in as_completed(futures):
+            fut.result()
+            done += 1
+            if done % 100 == 0 or done == len(jobs):
+                el = time.time() - t0
+                rate = done / el * 60 if el > 0 else 0
+                print(
+                    f"  [{done:>5}/{len(jobs)}] api={counters['api']} "
+                    f"cache={counters['cache']} bytes={counters['bytes']/1e6:.1f}MB "
+                    f"elapsed={el:.1f}s rate={rate:.0f}/min fails={len(failures)} "
+                    f"| {stats.summary()}"
+                )
 
     # Emit long-format CSVs
     print("\nEmitting long-format CSVs...")
@@ -299,9 +393,14 @@ def main():
         print(f"\n{len(failures)} (ticker,stmt) failures logged: {FAIL_LOG}")
 
     # Bandwidth report
-    print(f"\nDone. api_calls={api_calls} cache_hits={cache_hits} "
-          f"total_bytes_from_api={bytes_fetched/1e6:.1f}MB "
-          f"({bytes_fetched/1e9:.3f}GB of 20GB monthly cap)")
+    el = time.time() - t0
+    print(
+        f"\nDone. api_calls={counters['api']} cache_hits={counters['cache']} "
+        f"total_bytes_from_api={counters['bytes']/1e6:.1f}MB "
+        f"({counters['bytes']/1e9:.3f}GB of 20GB monthly cap) "
+        f"elapsed={el:.1f}s effective_rate={counters['api']/el*60:.0f}/min"
+    )
+    print(f"  Latency: {stats.summary()}")
 
 
 if __name__ == "__main__":

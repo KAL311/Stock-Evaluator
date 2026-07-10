@@ -1,16 +1,8 @@
 
 ===== Parity Study A =====
   max_fiscal_year: 2024  years fetched: 5
-  Sample: 173 tickers loaded from data\fmp\parity_a_sample_tickers.txt
-  Fetching FMP for 173 tickers × 3 statements × 5y (cap 250/min)...
-    [  50/173] api=0 cache=150 bytes=0.0MB elapsed=0.0s fails=0
-    [ 100/173] api=0 cache=300 bytes=0.0MB elapsed=0.1s fails=0
-    [ 150/173] api=0 cache=450 bytes=0.0MB elapsed=0.1s fails=0
-    [ 173/173] api=0 cache=519 bytes=0.0MB elapsed=0.2s fails=0
-  Wrote fundamentals_income.csv: 861 rows (173 tickers)
-  Wrote fundamentals_balance.csv: 861 rows (173 tickers)
-  Wrote fundamentals_cashflow.csv: 861 rows (173 tickers)
-  Total bytes from API: 0.0MB (0.000GB of 20GB monthly cap)
+  Sample: 1000 tickers loaded from data\fmp\parity_a_sample_tickers.txt
+  Skipping fetch (--skip-fetch).
 
   Importing market_screener + fmp_mapping...
   §Stage2.5 factor-decay loaded (2026-05-26T12:25:30, n_periods=6)
@@ -19,35 +11,35 @@
 
   Loading SimFin bulk data (once, shared between both runs)...
   Loading companies...
-Dataset "us-companies" on disk (2 days old).
+Dataset "us-companies" on disk (3 days old).
 - Loading from disk ... Done!
     6588 companies
   Loading industries...
-Dataset "industries" on disk (2 days old).
+Dataset "industries" on disk (3 days old).
 - Loading from disk ... Done!
     74 industries
   Loading annual income statements...
-Dataset "us-income-annual" on disk (2 days old).
+Dataset "us-income-annual" on disk (3 days old).
 - Loading from disk ... Done!
     16976 rows
   Loading annual balance sheets...
-Dataset "us-balance-annual" on disk (2 days old).
+Dataset "us-balance-annual" on disk (3 days old).
 - Loading from disk ... Done!
     16976 rows
   Loading annual cash flow...
-Dataset "us-cashflow-annual" on disk (2 days old).
+Dataset "us-cashflow-annual" on disk (3 days old).
 - Loading from disk ... Done!
     16974 rows
   Loading quarterly income statements...
-Dataset "us-income-quarterly" on disk (2 days old).
+Dataset "us-income-quarterly" on disk (3 days old).
 - Loading from disk ... Done!
     49726 rows
   Loading quarterly cash flow...
-Dataset "us-cashflow-quarterly" on disk (2 days old).
+Dataset "us-cashflow-quarterly" on disk (3 days old).
 - Loading from disk ... Done!
     49731 rows
   Loading daily share prices...
-Dataset "us-shareprices-daily" on disk (2 days old).
+Dataset "us-shareprices-daily" on disk (3 days old).
 - Loading from disk ... Done!
     6229137 rows
 
@@ -88,9 +80,9 @@ Dataset "us-shareprices-daily" on disk (2 days old).
 
   === FMP history metrics for sample ===
   Computing multi-year history metrics...
-    Computed history metrics for 173 tickers
-    hist_fmp (sample only): 173 tickers
-    hist_fmp_merged: 4388 tickers (of which 173 are FMP-sourced)
+    Computed history metrics for 998 tickers
+    hist_fmp (sample only): 998 tickers
+    hist_fmp_merged: 4388 tickers (of which 998 are FMP-sourced)
   Building stock snapshot...
     Processed 1000/6588
     Processed 1500/6588
@@ -104,7 +96,7 @@ Dataset "us-shareprices-daily" on disk (2 days old).
   Unmapped industries (13 stocks total):
       13  nan
     df_fmp: 2514 rows
-    FMP-covered tickers surviving snapshot filter: 173
+    FMP-covered tickers surviving snapshot filter: 998
 
   === Scoring (compute_potential_scores_v2, full universe) ===
   Computing v2 potential scores (sub-industry ranked)...
@@ -116,17 +108,19 @@ Dataset "us-shareprices-daily" on disk (2 days old).
     Scored 2157/2514 stocks
   Computing v2 potential scores (sub-industry ranked)...
     §Stage2.5 v2 decay mults: V=0.641 Q=0.630 G=0.909 S=1.000
-    §Stage1.1 v2 resampled: 1000 draws, 182 robust top-decile
+    §Stage1.1 v2 resampled: 1000 draws, 184 robust top-decile
     §Stage1.3 v2 impact haircut: 2319 stocks avg=73bps max=817bps
     §Stage2.6 v2 crowding: 27 stocks held by >=2 of 4 factor ETFs
     Dropped 357 stocks in small rank groups (<30)
     Scored 2157/2514 stocks
-  Wrote C:\Users\fraun\OneDrive\Documents\Stock Evaluator\data\fmp\parity_a_results.csv — 2514 tickers total, 173 in sample
-Traceback (most recent call last):
-  File "C:\Users\fraun\OneDrive\Documents\Stock Evaluator\scripts\parity_study_a.py", line 331, in <module>
-    main()
-    ~~~~^^
-  File "C:\Users\fraun\OneDrive\Documents\Stock Evaluator\scripts\parity_study_a.py", line 295, in main
-    all_t = set(hist_sf.keys()) | set(hist_fmp.keys())
-                ^^^^^^^
-NameError: name 'hist_sf' is not defined. Did you mean: 'hist_fmp'?
+  Wrote C:\Users\fraun\OneDrive\Documents\Stock Evaluator\data\fmp\parity_a_results.csv — 2514 tickers total, 1000 in sample
+  Wrote C:\Users\fraun\OneDrive\Documents\Stock Evaluator\data\fmp\parity_a_hist_diag.csv
+
+  === Summary ===
+    tickers scored on both paths: 879
+    valuation_score      n= 879  rho=1.0000  mean|delta|=  0.00  median|delta|=  0.00
+    quality_score        n= 879  rho=0.9420  mean|delta|=  3.24  median|delta|=  0.98
+    growth_score         n= 873  rho=0.8839  mean|delta|=  5.69  median|delta|=  1.57
+    sentiment_score      n= 879  rho=1.0000  mean|delta|=  0.00  median|delta|=  0.00
+    potential_score      n= 879  rho=0.9405  mean|delta|=  2.19  median|delta|=  0.60
+  Done.
