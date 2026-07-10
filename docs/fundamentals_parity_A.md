@@ -286,3 +286,120 @@ Using the pre-committed rules and the measured evidence above:
 - `data/fmp/parity_a_curliab_iso.csv` — per-ticker Altman Z + Piotroski F under baseline SimFin vs FMP cur_liab swap, with SimFin decile.
 - `data/fmp/parity_a_recon.csv` — per-ticker SimFin cur_liab vs FMP orig + V1 + V2 + V3 reconstruction variants and percent errors.
 
+---
+
+## Hybrid feasibility assessment (diagnostic, no code changes)
+
+Assessment ONLY. Zero mapper / scoring / loader / backtest / weight edits. Purpose: determine whether the Hybrid option (FMP for all fundamentals EXCEPT `Total Current Liabilities`, which stays SimFin-sourced) is a clean single-column swap or a fragile source-mix, so the operator can make the final B-vs-Hybrid call on plumbing risk.
+
+### 1. Where cur_liab is consumed on the v2 scoring path
+
+**Input column name:** `Total Current Liabilities` (SimFin naming; the FMP mapper writes this same column via `totalCurrentLiabilities`).
+
+**Live read sites (grep-verified in src/market_screener.py):**
+
+| File:line | Site | Consumes |
+|---|---|---|
+| `src/market_screener.py:928` | `compute_history_metrics_full` keep_bal list | passthrough |
+| `src/market_screener.py:976` | `m['cur_l_yr'] = m.get('Total Current Liabilities', 0)` | per-year derived col |
+| `src/market_screener.py:977` | `m['cr_yr'] = m['cur_a_yr'] / m['cur_l_yr'].where(...)` | per-year current ratio |
+| `src/market_screener.py:598-599` | `piotroski_f_components` reads `cr_yr` (curr + prev) | F-score liquidity signal `f_liquidity` (YoY cr delta) |
+| `src/market_screener.py:640` | `altman_z_score` reads `cur_l_yr` | Altman Z components A (wc/ta) + D (eq/(debt+cur_l)) |
+| `src/market_screener.py:1495-1560` | `compute_snapshot` reads `Total Current Liabilities` from bal_row | emits `df.current_ratio` (float) |
+| `src/market_screener.py:1835` | `compute_potential_scores` | `_rank_within(df['current_ratio'].clip(upper=10.0))` → quality subscore component (weight 0.05 per L463) |
+
+**Dead-code alternates:** `compute_piotroski_fscore` (L3573+), `compute_altman_zscore` (L3649+), `compute_beneish_mscore` (L3682+), and `apply_quality_gates` (L3734+) reference `df.current_liabilities` and `df.working_capital` — but grep confirms **those df columns are never set anywhere**. `apply_quality_gates` has no call sites either. These functions are not on the v2 scoring path.
+
+**Net:** cur_liab flows through **exactly one column (`Total Current Liabilities`)** into the per-year metric matrix; downstream consumers derive `cur_l_yr`, `cr_yr`, `current_ratio`. Single-column swap surface is confirmed.
+
+### 2. FY-alignment risk — quantified on the 1000-ticker sample
+
+Merge key both sources use: `(Ticker, Fiscal Year)`.
+
+| Signal | Value |
+|---|---|
+| Off-calendar SimFin filers (Report Date month ≠ 12) | **234/1000 (23.4%)** |
+| Off-calendar FMP filers | 250/998 |
+| Tickers in both sources | 998/1000 (2 SF-only: NANO, USX; 0 FMP-only) |
+| **FY-end MONTH DISAGREEMENT** (same ticker, different fiscal-year-end month between sources) | **39/998 (3.9%)** |
+| `(Ticker, FY)` pairs — SF rows in sample | 4755 |
+| `(Ticker, FY)` pairs — FMP rows in sample | 5966 |
+| **Merge match rate: (Ticker, FY) in both** | **4677 (78.4% of FMP)** |
+| FMP-only pairs (SF lacks this FY) | 1289 (21.6% of FMP) |
+| SF-only pairs (FMP lacks this FY) | 78 (1.6% of SF) |
+| Same (ticker, FY) but Report Date month DIFFERENT | 43/4677 (0.9%) |
+| Same (ticker, FY) but Report Date differs by >90 days | 103/4677 (2.2%) |
+
+**FY-label mismatch examples (sources disagree on the fiscal-year-end month for the same ticker):**
+
+| Ticker | SF month | FMP month | Type |
+|---|---|---|---|
+| LULU / PLAY / CHWY / PVH | 1 | 2 | 52-53 week retailer year — SF uses lagged label |
+| SLAB / CRI / HLIO / WLDN / EYE | 12 | 1 | ~1-month off (year-crossing period end) |
+| JOUT / ARMK / MTSI | 9 | 10 | fiscal Sep/Oct — labeling boundary |
+| **ROIV** | **12** | **3** | 3-month off — different fiscal period entirely |
+| **SLDP** | **12** | **9** | 3-month off |
+| **VCEL** | **6** | **12** | 6-month off — DIFFERENT FISCAL YEAR ENTIRELY |
+
+The retailer / SLAB / JOUT cases are essentially labeling-convention differences — the underlying data covers approximately the same period, but SF's "FY2024" ≠ FMP's "FY2024" by a month. For ROIV / SLDP / VCEL the mismatch is large enough that the two sources' `FY2024` refers to genuinely different reporting periods, and a naive merge on `(Ticker, FY)` would produce a nonsense join.
+
+### 3. Failure mode under SimFin-preferred + FMP-fallback rule
+
+For each ticker, take the last 5 FYs ≤ 2024 from the union of both sources. Per (ticker, FY) cell: use SF cur_liab if present, else FMP cur_liab.
+
+| Outcome | tickers | share |
+|---|---|---|
+| Pure SF across window (no fallback needed) | 807 | 80.7% |
+| Pure FMP across window | 0 | 0.0% |
+| **MIXED sources within window** | **193** | **19.3%** |
+
+Of the 193 mixed cases, common patterns (see samples below): FMP fills the OLDEST year(s) where SimFin coverage doesn't reach back, then SimFin takes over for recent years.
+
+Sample mixed cases (per-year sources across the 5-year window):
+
+| Ticker | Window sources (oldest → newest) |
+|---|---|
+| DBRG, HAYN, WIRE, USAP, MCFT, UI, SLQT, SWN, ALPN | `[FMP, SF, SF, SF, SF]` |
+| MRUS, TBLA | `[FMP, FMP, SF, SF, SF]` |
+| MOV, STM | `[SF, SF, SF, FMP, FMP]` |
+| NE | `[SF, SF, FMP, FMP, FMP]` |
+| SCWX | `[SF, SF, SF, SF, FMP]` |
+
+**Downstream corruption:**
+
+- `f_liquidity` (Piotroski) reads `cr_yr[curr]` vs `cr_yr[prev]`. If the two most recent years have MIXED sources (e.g. MOV/STM/NE `[..., FMP, FMP]` at the tail, or SCWX `[..., SF, FMP]`), the YoY delta compares a SimFin narrow denominator against an FMP broad denominator — apples-to-oranges. Corrupted signal.
+- Altman Z uses ONLY the most recent year for wc + tl, so its output is whatever source served that one cell. Not corrupted by mixed history, but its input still depends on the coin flip of which source has the latest FY.
+- `revenue_cv_5y`, `op_inc_cv_5y`, trends: use `rev_yr`, `op_inc_yr`, `ebitda_yr`, `fcf_yr` — none read `cur_l_yr` directly. Not corrupted.
+
+The mixed-history corruption is confined to Piotroski `f_liquidity`. But that's exactly the signal the Hybrid was supposed to protect. If 19% of the sample has mixed sources at the tail — and the fallback rule is what forces that mixing — then Hybrid's "provably gate-neutral" claim doesn't hold for those 19%.
+
+### 4. Architecture / maintenance cost
+
+- Hybrid requires the SimFin balance-sheet loader to stay live indefinitely for a single column (`Total Current Liabilities`) plus the (Ticker, Fiscal Year) index needed to look it up. `simfin.load_balance(variant='annual', market='us')` at `src/market_screener.py:863` cannot be retired.
+- Option B allows eventual full removal of `simfin.load_balance` and `load_income` / `load_cashflow` (annual and quarterly). Hybrid keeps SimFin annual balance alive; quarterly income + quarterly cashflow are separately still needed for TTM regardless (Study A caveat).
+- The FMP mapper (`src/fmp_mapping.py:map_balance`) would need a new `simfin_curliab_override` param + merge logic + fallback policy. Additional test surface.
+
+### Verdict — FRAGILE, not CLEAN
+
+Evidence:
+
+| Fragility signal | Threshold-for-clean | Measured |
+|---|---|---|
+| Merge match rate on (Ticker, FY) | ≥ 95% | **78.4%** ❌ |
+| FY-end month mismatches | ≈ 0 | **39/998** ❌ |
+| Mixed-source-history tickers | ≈ 0 | **193/1000 (19.3%)** ❌ |
+| Off-calendar filer count | not a fragility on its own but amplifies label risk | 234/1000 |
+| Ticker-set alignment | clean | ✓ (2 SF-only, 0 FMP-only) |
+
+The one clean signal (ticker sets) is dwarfed by three failure signals.
+
+**Hybrid does NOT provide the provably-gate-neutral guarantee it was proposed to give.** For the 22% of (Ticker, FY) pairs where SimFin lacks cur_liab, Hybrid falls back to FMP anyway — those tickers retain the exact Altman/Piotroski flips Option B would produce. For the 19% with mixed history, `f_liquidity`'s YoY delta becomes definitionally incoherent (comparing SimFin-narrow to FMP-broad across years within one ticker's own window). Add 3.9% FY-end labeling mismatches (some as large as 6 months for VCEL), and Hybrid trades documented Option-B risk (3 top-decile Altman flips) for undocumented mixed-source risk on a bigger fraction of the sample.
+
+**Evidence supports Option B** (accept the 3 documented top-decile Altman flips as a model-change note; retire SimFin fundamentals path). Hybrid earns neither the plumbing simplicity of B nor the provable neutrality it was proposed to provide.
+
+Not auto-picked; presented for operator confirmation. If the operator's use case is more forgiving of documented model changes than of hidden mixed-source drift on 19% of names, B. If the operator would rather retain a SimFin dependency for the specific column at the cost of the mixed-source corruption on the same 19%, Hybrid remains available.
+
+### Frozen-file guard (this assessment)
+
+`git diff --name-only src/market_screener.py scripts/backtest.v2.py` returns empty. Only `docs/fundamentals_parity_A.md` modified in this pass.
+
