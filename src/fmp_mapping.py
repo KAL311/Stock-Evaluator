@@ -86,6 +86,7 @@ is NO known parity gap for F or Z on the FMP path.
 from __future__ import annotations
 
 from pathlib import Path
+import numpy as np
 import pandas as pd
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -158,6 +159,11 @@ def map_income(fmp_income_csv: Path | None = None) -> pd.DataFrame:
     out = pd.DataFrame()
     out["Ticker"] = df["ticker"].astype(str).str.upper()
     out["Fiscal Year"] = _to_int_fy(df["fiscalYear"])
+    # Physical period-end date. Used by the LIVE-screener source-swap merge to
+    # key on (Ticker, Report Date) instead of the FY label, so retailers /
+    # off-calendar filers whose SF and FMP FY labels disagree collapse to a
+    # single physical period rather than duplicating (fix for the GIII class).
+    out["Report Date"] = pd.to_datetime(df.get("date"), errors="coerce")
     out["Revenue"] = pd.to_numeric(df["revenue"], errors="coerce")
     out["Gross Profit"] = pd.to_numeric(df["grossProfit"], errors="coerce")
     out["Operating Income (Loss)"] = pd.to_numeric(df["operatingIncome"], errors="coerce")
@@ -208,7 +214,8 @@ def map_income(fmp_income_csv: Path | None = None) -> pd.DataFrame:
 
     out = out.dropna(subset=["Ticker", "Fiscal Year"])
     out = out.reset_index(drop=True)
-    return out[INCOME_COLS]
+    cols = INCOME_COLS + (["Report Date"] if "Report Date" in out.columns else [])
+    return out[cols]
 
 
 def map_balance(fmp_balance_csv: Path | None = None) -> pd.DataFrame:
@@ -219,6 +226,7 @@ def map_balance(fmp_balance_csv: Path | None = None) -> pd.DataFrame:
     out = pd.DataFrame()
     out["Ticker"] = df["ticker"].astype(str).str.upper()
     out["Fiscal Year"] = _to_int_fy(df["fiscalYear"])
+    out["Report Date"] = pd.to_datetime(df.get("date"), errors="coerce")
     # totalEquity ~ totalStockholdersEquity for firms without minority interest;
     # prefer totalStockholdersEquity to match SimFin's "Total Equity" (which is
     # common-shareholders' equity), fall back to totalEquity.
@@ -236,7 +244,8 @@ def map_balance(fmp_balance_csv: Path | None = None) -> pd.DataFrame:
 
     out = out.dropna(subset=["Ticker", "Fiscal Year"])
     out = out.reset_index(drop=True)
-    return out[BALANCE_COLS]
+    cols = BALANCE_COLS + (["Report Date"] if "Report Date" in out.columns else [])
+    return out[cols]
 
 
 def map_cashflow(fmp_cashflow_csv: Path | None = None) -> pd.DataFrame:
@@ -247,6 +256,7 @@ def map_cashflow(fmp_cashflow_csv: Path | None = None) -> pd.DataFrame:
     out = pd.DataFrame()
     out["Ticker"] = df["ticker"].astype(str).str.upper()
     out["Fiscal Year"] = _to_int_fy(df["fiscalYear"])
+    out["Report Date"] = pd.to_datetime(df.get("date"), errors="coerce")
     out["Net Cash from Operating Activities"] = pd.to_numeric(
         df["netCashProvidedByOperatingActivities"], errors="coerce"
     )
@@ -271,7 +281,8 @@ def map_cashflow(fmp_cashflow_csv: Path | None = None) -> pd.DataFrame:
 
     out = out.dropna(subset=["Ticker", "Fiscal Year"])
     out = out.reset_index(drop=True)
-    return out[CASHFLOW_COLS]
+    cols = CASHFLOW_COLS + (["Report Date"] if "Report Date" in out.columns else [])
+    return out[cols]
 
 
 def load_fmp_as_simfin(
@@ -308,122 +319,210 @@ def load_annual_with_fallback(
     simfin_cashflow: pd.DataFrame,
     fmp_dir: Path | None = None,
     max_fiscal_year: int = 2024,
+    date_tolerance_days: int = 10,
     verbose: bool = True,
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    """Live-screener source-swap loader for Option B.
+    """Live-screener source-swap loader for Option B / Option C (physical-period key).
 
-    Returns three DataFrames with the SAME shape and MultiIndex as
+    Returns three DataFrames with the SAME MultiIndex(Ticker, Report Date) as
     simfin.load_income/balance/cashflow, so downstream code
     (compute_history_metrics + compute_snapshot) runs unmodified.
 
-    Merge rule (per-cell fallback, FMP-preferred):
-      - Rows keyed by (Ticker, Fiscal Year).
-      - Where FMP has (ticker, FY): overwrite the mapper-covered columns with
-        FMP values; other SimFin columns (S&M, non-op income, restated date,
-        etc.) stay from SimFin because compute_snapshot occasionally reads them.
-      - Rows where FMP has (ticker, FY) but SimFin does NOT: appended from the
-        FMP frame; other-SimFin columns stay NaN → compute_snapshot's
-        `.get(col, 0) or 0` defaults them to 0. These are the 22% of pairs
-        Study A flagged as FMP-only.
-      - Rows where SimFin has (ticker, FY) but FMP does NOT: kept verbatim
-        from SimFin. These are the ~2% SF-only pairs (NANO, USX, ...).
+    Merge rule — PHYSICAL PERIOD key (`Report Date`), not FY LABEL
+    -----------------------------------------------------------------
+    SimFin labels a fiscal year by calendar-year-of-START; FMP by
+    calendar-year-of-END. For off-calendar filers (retailers with Jan/Feb
+    year-ends, biotech with mid-year year-ends, etc.), the SAME physical
+    filing gets different FY labels (e.g. GIII: SF FY2020 = FMP FY2021,
+    both dated Report Date 2021-01-31). The old (Ticker, Fiscal Year)-keyed
+    merge would gap-fill one label with a SimFin row that is the SAME
+    physical filing as the neighbouring FMP row, duplicating one physical
+    period and inflating growth signals purely as a labeling artifact.
 
-    The function also logs mixed-source-history: tickers whose last-5-FY
-    window under `max_fiscal_year` contains BOTH FMP and SimFin sources.
-    Study A found this affects ~19% of the sample; the operator can inspect
-    the log and decide whether to promote to "FMP-only, no fallback" later.
+    This version keys on `(Ticker, Report Date)` with a tolerance window
+    (default 10 days). Two rows collapse when their report dates are within
+    the tolerance, treating them as the SAME physical period. FMP is
+    preferred within the collapse; SimFin is used only when FMP has no row
+    within tolerance of a SimFin row.
+
+    Fiscal Year label convention (post-merge)
+    ----------------------------------------
+    After the physical-period merge, we reassign a SINGLE consistent FY
+    label per row using the calendar year the fiscal period ENDS (i.e.
+    Report Date's year). This matches FMP's convention. A given physical
+    period will now carry the same FY label whether it came from SimFin
+    or FMP. Downstream aggregate_history_metrics's `max_fiscal_year`
+    filter continues to work; note that a period SF used to label as
+    FY2020 may now be relabeled FY2021 for retailers. Physical data is
+    unchanged.
+
+    Live/backtest keying difference (documented, benign)
+    ----------------------------------------------------
+    The LIVE screener runs through this function; the BACKTEST does not.
+    Backtest still uses SimFin's original FY labels. For off-calendar
+    filers a live score and its backtest counterpart may reference the
+    same physical period under different FY labels. That is the intended
+    firewall behavior — do not chase it as a bug.
     """
     fmp_i = map_income(None if fmp_dir is None else fmp_dir / "fundamentals_income.csv")
     fmp_b = map_balance(None if fmp_dir is None else fmp_dir / "fundamentals_balance.csv")
     fmp_c = map_cashflow(None if fmp_dir is None else fmp_dir / "fundamentals_cashflow.csv")
+
+    stats = {"collapsed_exact": 0, "collapsed_within_tol": 0,
+             "fmp_only_periods": 0, "sf_only_periods": 0,
+             "total_periods_out": 0, "dup_period_tickers": 0}
 
     def _blend(
         sf: pd.DataFrame,
         fmp: pd.DataFrame,
         mapper_cols: list[str],
     ) -> pd.DataFrame:
-        sf_flat = sf.reset_index()
-        # Keys align on (Ticker, Fiscal Year). FMP FY was cast to Int64 by the
-        # mapper; SimFin FY is int64. Coerce both to a common integer dtype
-        # for consistent set membership.
-        sf_flat["Fiscal Year"] = pd.to_numeric(
-            sf_flat["Fiscal Year"], errors="coerce"
-        ).astype("Int64")
+        # Flatten
+        sf_flat = sf.reset_index().copy()
         fmp2 = fmp.copy()
-        fmp2["Fiscal Year"] = pd.to_numeric(
-            fmp2["Fiscal Year"], errors="coerce"
-        ).astype("Int64")
 
-        # Overwrite mapper-covered columns on SF rows where FMP has the same key.
-        fmp_indexed = fmp2.set_index(["Ticker", "Fiscal Year"])
-        sf_flat = sf_flat.set_index(["Ticker", "Fiscal Year"])
-        overlap_idx = sf_flat.index.intersection(fmp_indexed.index)
-        for col in mapper_cols:
-            if col in fmp_indexed.columns and col in sf_flat.columns:
-                sf_flat.loc[overlap_idx, col] = fmp_indexed.loc[overlap_idx, col]
+        # Ensure Report Date is datetime
+        sf_flat["Report Date"] = pd.to_datetime(sf_flat["Report Date"], errors="coerce")
+        fmp2["Report Date"] = pd.to_datetime(fmp2["Report Date"], errors="coerce")
 
-        # Append FMP-only rows. Preserve mapper columns from FMP; other SimFin
-        # columns stay NaN. Report Date derived from Publish Date.
-        fmp_only_idx = fmp_indexed.index.difference(sf_flat.index)
-        if len(fmp_only_idx) > 0:
-            fmp_only = fmp_indexed.loc[fmp_only_idx].reset_index()
-            if "Publish Date" in fmp_only.columns:
-                fmp_only["Report Date"] = pd.to_datetime(
-                    fmp_only["Publish Date"], errors="coerce"
-                )
-            else:
-                fmp_only["Report Date"] = pd.to_datetime(
-                    fmp_only["Fiscal Year"].astype(str) + "-12-31", errors="coerce"
-                )
-            # Union columns with sf_flat
-            sf_reset = sf_flat.reset_index()
-            all_cols = list(dict.fromkeys(list(sf_reset.columns) + list(fmp_only.columns)))
+        # Drop rows with missing Report Date (can't be physically keyed)
+        sf_flat = sf_flat.dropna(subset=["Ticker", "Report Date"])
+        fmp2 = fmp2.dropna(subset=["Ticker", "Report Date"])
+
+        # Per-ticker union + collapse-within-tolerance
+        rows_out: list[pd.DataFrame] = []
+        tol = pd.Timedelta(days=date_tolerance_days)
+        sf_by_t = dict(list(sf_flat.groupby("Ticker", sort=False)))
+        fmp_by_t = dict(list(fmp2.groupby("Ticker", sort=False)))
+        tickers = set(sf_by_t) | set(fmp_by_t)
+
+        for t in tickers:
+            sf_rows = sf_by_t.get(t, sf_flat.iloc[0:0]).sort_values("Report Date").copy()
+            fmp_rows = fmp_by_t.get(t, fmp2.iloc[0:0]).sort_values("Report Date").copy()
+
+            if len(fmp_rows) == 0:
+                # SimFin-only ticker (e.g. NANO, USX). Keep as-is.
+                stats["sf_only_periods"] += len(sf_rows)
+                rows_out.append(sf_rows)
+                continue
+            if len(sf_rows) == 0:
+                stats["fmp_only_periods"] += len(fmp_rows)
+                # Add all-SF cols as NA
+                out = fmp_rows.copy()
+                for c in sf_flat.columns:
+                    if c not in out.columns:
+                        out[c] = pd.NA
+                rows_out.append(out[sf_flat.columns.tolist() + [c for c in out.columns if c not in sf_flat.columns]])
+                continue
+
+            # For each SF row, check if any FMP row falls within tol; if so, drop SF.
+            fmp_dates = fmp_rows["Report Date"].values
+            sf_keep_mask = []
+            for sd in sf_rows["Report Date"].values:
+                deltas_days = np.abs((fmp_dates - sd).astype("timedelta64[D]").astype(int))
+                if len(deltas_days) == 0:
+                    sf_keep_mask.append(True)
+                    continue
+                min_delta = deltas_days.min()
+                if min_delta == 0:
+                    stats["collapsed_exact"] += 1
+                    sf_keep_mask.append(False)
+                elif min_delta <= date_tolerance_days:
+                    stats["collapsed_within_tol"] += 1
+                    sf_keep_mask.append(False)
+                else:
+                    sf_keep_mask.append(True)  # SF has a period FMP lacks
+            sf_kept = sf_rows[sf_keep_mask]
+            stats["sf_only_periods"] += len(sf_kept)
+            stats["fmp_only_periods"] += len(fmp_rows)
+
+            # Combine: FMP + SF-not-covered. Union of columns.
+            all_cols = list(dict.fromkeys(list(sf_flat.columns) + list(fmp_rows.columns)))
+            fmp_pad = fmp_rows.copy()
             for c in all_cols:
-                if c not in sf_reset.columns:
-                    sf_reset[c] = pd.NA
-                if c not in fmp_only.columns:
-                    fmp_only[c] = pd.NA
-            combined = pd.concat([sf_reset[all_cols], fmp_only[all_cols]], ignore_index=True)
-        else:
-            combined = sf_flat.reset_index()
+                if c not in fmp_pad.columns:
+                    fmp_pad[c] = pd.NA
+            sf_pad = sf_kept.copy()
+            for c in all_cols:
+                if c not in sf_pad.columns:
+                    sf_pad[c] = pd.NA
+            combined = pd.concat([fmp_pad[all_cols], sf_pad[all_cols]], ignore_index=True)
+            rows_out.append(combined)
 
-        combined = combined.dropna(subset=["Ticker", "Fiscal Year", "Report Date"])
-        return combined.set_index(["Ticker", "Report Date"]).sort_index()
+        if not rows_out:
+            merged = sf_flat.iloc[0:0].copy()
+        else:
+            merged = pd.concat(rows_out, ignore_index=True)
+
+        # Assign consistent Fiscal Year label = year of Report Date (year-of-END)
+        merged["Fiscal Year"] = merged["Report Date"].dt.year.astype("Int64")
+        merged = merged.dropna(subset=["Ticker", "Report Date", "Fiscal Year"])
+        merged = merged.sort_values(["Ticker", "Report Date"])
+        stats["total_periods_out"] = len(merged)
+        return merged.set_index(["Ticker", "Report Date"]).sort_index()
 
     merged_i = _blend(simfin_income, fmp_i, INCOME_COLS)
     merged_b = _blend(simfin_balance, fmp_b, BALANCE_COLS)
     merged_c = _blend(simfin_cashflow, fmp_c, CASHFLOW_COLS)
 
-    # ---- Mixed-source-history log ----
-    # For each ticker, look at the last 5 FYs <= max_fiscal_year; note which
-    # source served each (Ticker, FY). Print the count that mix.
-    fmp_i_keys = set(zip(fmp_i["Ticker"], pd.to_numeric(fmp_i["Fiscal Year"], errors="coerce").astype("Int64")))
-    mixed_tickers: list[str] = []
-    sample_mixed_detail: list[tuple[str, list[str]]] = []
+    # ---- Duplicate-physical-period check (should be ~0) ----
+    dup = 0
+    dup_examples = []
     for t, g in merged_i.reset_index().groupby("Ticker"):
-        g = g[g["Fiscal Year"] <= max_fiscal_year].sort_values("Fiscal Year")
-        fys = list(g["Fiscal Year"].dropna().astype(int).tail(5))
-        if not fys:
+        g = g[g["Fiscal Year"] <= max_fiscal_year].sort_values("Report Date")
+        g_window = g.tail(5)
+        # Duplicate = same year label OR two rows within tolerance
+        if len(g_window["Fiscal Year"].unique()) < len(g_window):
+            dup += 1
+            if len(dup_examples) < 5:
+                dup_examples.append((t, list(g_window["Report Date"].dt.date)))
+    stats["dup_period_tickers"] = dup
+
+    # ---- Mixed-source-history log (kept for continuity — now near-0 by construction) ----
+    fmp_report_dates_by_ticker: dict[str, list] = {}
+    for t, g in fmp_i.dropna(subset=["Report Date"]).groupby("Ticker"):
+        fmp_report_dates_by_ticker[t] = list(g["Report Date"])
+
+    tol = pd.Timedelta(days=date_tolerance_days)
+    def _is_fmp(t, rd):
+        dates = fmp_report_dates_by_ticker.get(t, [])
+        for d in dates:
+            if abs((rd - d).days) <= date_tolerance_days:
+                return True
+        return False
+
+    mixed_tickers: list[str] = []
+    for t, g in merged_i.reset_index().groupby("Ticker"):
+        g = g[g["Fiscal Year"] <= max_fiscal_year].sort_values("Report Date")
+        rows = list(g.tail(5)["Report Date"])
+        if not rows:
             continue
-        srcs = ["FMP" if (t, y) in fmp_i_keys else "SF" for y in fys]
+        srcs = ["FMP" if _is_fmp(t, rd) else "SF" for rd in rows]
         if len(set(srcs)) > 1:
             mixed_tickers.append(t)
-            if len(sample_mixed_detail) < 10:
-                sample_mixed_detail.append((t, srcs))
+
     if verbose:
         n_total = merged_i.index.get_level_values(0).nunique()
         print(
-            f"  FMP fundamentals: merged {len(merged_i)} income, {len(merged_b)} balance, "
-            f"{len(merged_c)} cashflow rows"
+            f"  FMP fundamentals (physical-period keyed, ±{date_tolerance_days}d tolerance):"
         )
         print(
-            f"  FMP fundamentals: mixed-source-history tickers "
-            f"{len(mixed_tickers)}/{n_total} "
-            f"({len(mixed_tickers) / max(1, n_total) * 100:.1f}%). "
-            f"Piotroski f_liquidity may be corrupted on these."
+            f"    merged income={len(merged_i)}, balance={len(merged_b)}, cashflow={len(merged_c)} rows"
         )
-        for t, srcs in sample_mixed_detail:
-            print(f"    e.g. {t}: {srcs}")
+        print(
+            f"    collapse events on income: exact={stats['collapsed_exact']}, "
+            f"within_tol={stats['collapsed_within_tol']}"
+        )
+        print(
+            f"    duplicate-physical-period tickers in scoring window: "
+            f"{stats['dup_period_tickers']} (should be 0)"
+        )
+        if dup_examples:
+            for tk, dates in dup_examples:
+                print(f"      e.g. {tk}: {dates}")
+        print(
+            f"    mixed-source-history tickers: {len(mixed_tickers)}/{n_total}"
+        )
 
     return merged_i, merged_b, merged_c
 

@@ -1,15 +1,15 @@
 A/B verification summary — USE_FMP_FUNDAMENTALS off vs on (MEASURED)
 ======================================================================
 tickers scored on both paths: 2157
-  valuation_score      n=2157  rho=0.9722  mean|delta|=  2.33  median|delta|=  0.63
-  quality_score        n=2134  rho=0.9518  mean|delta|=  2.85  median|delta|=  1.07
-  growth_score         n=1724  rho=0.9430  mean|delta|=  3.65  median|delta|=  1.12
+  valuation_score      n=2157  rho=0.9723  mean|delta|=  2.33  median|delta|=  0.63
+  quality_score        n=2134  rho=0.9245  mean|delta|=  4.27  median|delta|=  1.69
+  growth_score         n=1722  rho=0.8662  mean|delta|=  7.42  median|delta|=  3.39
   sentiment_score      n=2157  rho=1.0000  mean|delta|=  0.00  median|delta|=  0.00
-  potential_score      n=2157  rho=0.9679  mean|delta|=  1.55  median|delta|=  0.59
+  potential_score      n=2157  rho=0.9342  mean|delta|=  2.58  median|delta|=  1.01
 
-Decile migration: 20.4%   within ±1 decile: 96.2%
-Top-decile Jaccard: 0.7633  |A|=216  |B|=216  overlap=187
-Names ENTERING top decile under B (not in A) — 29:
-  ANF, APH, CPE, CSCO, CTT, DORM, EAT, ENSG, EPRT, GIII, HOOD, HSAI, HST, HTGC, IBRX, IMAX, KTB, LRCX, LYV, MPLX, NFLX, NTNX, NWE, OC, PVAC, SIGA, TPR, TRIN, VERV
-Names LEAVING top decile under B (in A but not B) — 29:
-  ABG, ADP, AGX, AMPH, AN, BBIO, BMI, BMY, CME, CPRI, DRQ, DX, FHI, G, GAMB, HGV, MASI, PAG, PEN, PR, RDVT, RH, RITM, SBTX, SGFY, STLA, STM, SWTX, WDFC
+Decile migration: 31.3%   within ±1 decile: 92.4%
+Top-decile Jaccard: 0.6615  |A|=216  |B|=216  overlap=172
+Names ENTERING top decile under B (not in A) — 44:
+  ALV, ANF, APH, APP, AVPT, BCRX, BSX, CAKE, CPE, CTRE, CWAN, DECK, DORM, ENSG, EPRT, ETSY, FSLR, GM, GMS, HSAI, HWM, IBRX, INTU, ITCI, ITRI, KROS, MSFT, NTNX, NWE, PGY, PRGS, PVAC, QCOM, RIGL, SHW, SPOT, TPX, TRIN, UBER, VCTR, VERV, VRDN, WWD, WWE
+Names LEAVING top decile under B (in A but not B) — 44:
+  ABG, AGR, AMPH, AN, ARQT, ATO, AXSM, BLD, BMI, BRO, CAPR, CNK, CPRI, CROX, DX, ECOM, FOX, GAMB, HCCI, HGV, HUBB, INGR, IRMD, JFIN, LAD, MASI, MOH, MRO, NEX, PAG, PANW, PAYC, PR, PTGX, RH, RITM, SGFY, STLA, STM, TGTX, TSLA, TW, UPWK, WDFC

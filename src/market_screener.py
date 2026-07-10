@@ -4476,26 +4476,39 @@ def main():
         (companies, industries, income, balance, cashflow,
          income_q, cashflow_q, sp) = load_simfin_data()
         print()
-        # LIVE ANNUAL FUNDAMENTALS SOURCE-SWAP (Option B from Study A).
-        # USE_FMP_FUNDAMENTALS=1 substitutes FMP annual income/balance/cashflow
-        # for the SimFin ones just loaded, using src/fmp_mapping.py.
+        # LIVE ANNUAL FUNDAMENTALS SOURCE (Option B / Option C from Study A).
+        # DEFAULT: FMP annual (physical-period-keyed merge with SimFin fallback).
+        # ROLLBACK: USE_FMP_FUNDAMENTALS=0 (or "off"/"false") forces SimFin-only.
+        # Legacy USE_FMP_FUNDAMENTALS=1 also accepted (same as default).
         # Semantics:
-        #   - ONLY the annual frames are swapped; income_q + cashflow_q (feeding
+        #   - ONLY the annual frames swap; income_q + cashflow_q (feeding
         #     compute_ttm and compute_quarterly_yoy_growth) stay SimFin.
-        #   - Merge rule: per (Ticker, Fiscal Year) FMP preferred, SimFin
-        #     fallback for cells FMP lacks. See src/fmp_mapping.py:
+        #   - Merge rule: keyed on (Ticker, Report Date) with 10-day tolerance;
+        #     FMP preferred per physical period, SimFin fallback only where FMP
+        #     lacks that physical period. Fiscal Year re-labeled to year of
+        #     Report Date (year-of-END). See src/fmp_mapping.py:
         #     load_annual_with_fallback for the full contract.
-        #   - Mixed-source-history tickers are logged, not silenced.
+        #   - Mixed-source-history tickers are logged, not silenced. Under the
+        #     physical-period key this should be near 0.
         #   - Backtest is NOT routed through here (scripts/backtest.*.py does
         #     not call this gate); the backtest firewall stays intact.
-        # Unset / default: SimFin flows through unchanged. Bit-identical.
-        use_fmp_fund = os.environ.get('USE_FMP_FUNDAMENTALS', '').lower() in ('1', 'true', 'yes')
+        _fmp_env = os.environ.get('USE_FMP_FUNDAMENTALS', '').strip().lower()
+        use_fmp_fund = _fmp_env not in ('0', 'off', 'false', 'no')
         if use_fmp_fund:
             from src.fmp_mapping import load_annual_with_fallback
-            print('  USE_FMP_FUNDAMENTALS=1 — swapping annual income/balance/cashflow to FMP')
+            print()
+            print('  ' + '=' * 70)
+            print('  FUNDAMENTALS SOURCE: FMP annual (physical-period keyed) + SimFin quarterly/TTM')
+            print('  ' + '=' * 70)
             income, balance, cashflow = load_annual_with_fallback(
                 income, balance, cashflow,
             )
+            print()
+        else:
+            print()
+            print('  ' + '=' * 70)
+            print('  FUNDAMENTALS SOURCE: SimFin (all) [USE_FMP_FUNDAMENTALS=0]')
+            print('  ' + '=' * 70)
             print()
         sp_meta = sp.sort_index().groupby(level=0).last()
         sp_meta.columns = [f'sp_{c}' for c in sp_meta.columns]

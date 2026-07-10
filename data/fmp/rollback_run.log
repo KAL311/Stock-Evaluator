@@ -1,0 +1,163 @@
+  WARNING: Finviz health check failed. Disabling Finviz data for this run.
+    insider_own/short_float will be NaN for all tickers.
+    sentiment_score will use only price-based signals.
+  §Stage2.5 factor-decay loaded (2026-05-26T12:25:30, n_periods=6)
+    lambdas: {'valuation': 0.5611238665754277, 'quality': 0.5870369397450694, 'growth': 0.10033293453620953, 'sentiment': 0.0}
+    POTENTIAL_WEIGHTS: {'valuation': 0.4, 'quality': 0.4, 'growth': 0.2, 'sentiment': 0.0} -> {'valuation': 0.371, 'quality': 0.365, 'growth': 0.263, 'sentiment': 0.0}
+
+  ==========================================
+        Stock Market Screener
+  ==========================================
+  Macro regime: R3  (ISM=52.7, core-CPI=2.8%, 10Y-2Y=58.0bps, HY-OAS=320.0bps)
+  Sector tilts: consumer_staples+5, healthcare+3, utilities+5, energy+3, consumer_disc-5, tech_software-3
+
+  [First run or cache expired - fetching data...]
+
+  Using default 10yr Treasury: 4.50%
+
+  Loading companies...
+Dataset "us-companies" on disk (3 days old).
+- Loading from disk ... Done!
+    6588 companies
+  Loading industries...
+Dataset "industries" on disk (3 days old).
+- Loading from disk ... Done!
+    74 industries
+  Loading annual income statements...
+Dataset "us-income-annual" on disk (3 days old).
+- Loading from disk ... Done!
+    16976 rows
+  Loading annual balance sheets...
+Dataset "us-balance-annual" on disk (3 days old).
+- Loading from disk ... Done!
+    16976 rows
+  Loading annual cash flow...
+Dataset "us-cashflow-annual" on disk (3 days old).
+- Loading from disk ... Done!
+    16974 rows
+  Loading quarterly income statements...
+Dataset "us-income-quarterly" on disk (3 days old).
+- Loading from disk ... Done!
+    49726 rows
+  Loading quarterly cash flow...
+Dataset "us-cashflow-quarterly" on disk (3 days old).
+- Loading from disk ... Done!
+    49731 rows
+  Loading daily share prices...
+Dataset "us-shareprices-daily" on disk (3 days old).
+- Loading from disk ... Done!
+    6229137 rows
+
+
+  ======================================================================
+  FUNDAMENTALS SOURCE: SimFin (all) [USE_FMP_FUNDAMENTALS=0]
+  ======================================================================
+
+  Computing Beta from daily returns (cap-weighted proxy)...
+    5397 tickers with return data
+    Filtered 842 extreme daily returns (>100%)
+    Computed Beta for 5258 tickers
+    Computed realized volatility for 5313 tickers
+  Computing 52-week high/low...
+    Computed 52w high/low for 5129 tickers
+  Computing price momentum and 52w distance...
+    Computed momentum for 5819 tickers
+  Computing median daily dollar volume (trailing 30d)...
+    Computed liquidity for 5855 tickers
+
+  Computing multi-year history metrics...
+    Computed history metrics for 4390 tickers
+  Computing TTM (trailing twelve months)...
+    Computed TTM for 3006 tickers
+    Computed quarterly YoY revenue growth for 2524 tickers
+
+
+  Building stock snapshot...
+    Processed 1000/6588
+    Processed 1500/6588
+    Processed 2500/6588
+    Processed 3000/6588
+    Processed 3500/6588
+    Processed 5000/6588
+    Processed 2514 stocks (Market Cap > $300,000,000, Min Daily Vol $1,000,000)
+    0 tickers have unknown filing date (defaulted to stale)
+
+  Unmapped industries (13 stocks total):
+      13  nan
+  Computing potential scores...
+    Dropped 522 stocks from valuation_score (insufficient component coverage)
+    Dropped 86 stocks from quality_score (insufficient component coverage)
+    Masked trend metrics: 152 thin history (<4yr), 0 unknown history, 258 stale filings
+    Dropped 163 stocks from growth_score (insufficient component coverage)
+    Dropped 274 stocks from sentiment_score (insufficient component coverage)
+    Finviz coverage: 0/2514 (0%)
+    Dropped 779 stocks from potential_score (insufficient sub-score coverage)
+    §Phase 2 quality gate: nulled 90 value-trap stocks (value>70 with F<5 or Z<1.81)
+    §5.2 killer-KPI: nulled 55 stocks failing sector-deal-breakers
+    §5.3 regime=R3 tilts applied: {'consumer_staples': 5, 'healthcare': 3, 'utilities': 5, 'energy': 3, 'consumer_disc': -5, 'tech_software': -3}
+    §Stage1.1 resampled scoring: 1000 draws, 159 robust top-decile (>=90%), 63 uncertain (50-90%)
+    §Stage1.3 impact haircut: 2319 stocks, avg=73bps, max=817bps (Q=$1,000,000, Y=1.0)
+    §Stage2.6 crowding: 27 stocks held by >=2 of 4 factor ETFs (penalty -3.0pts/extra ETF)
+    Dropped scoring for sectors with <30 stocks: ['', 'banks'] (32 stocks)
+    Filing freshness: 782 stocks >18mo stale, 625 >24mo ancient
+    Scored 1603/2514 stocks across 12 sector groups
+    Flagged 126 stocks with mispricing patterns
+      DEEP_VALUE         10
+      FALLEN_ANGEL       16
+      QUIET_COMPOUNDER   43
+      MOMENTUM_VALUE     34
+      AVOID_VALUE_TRAP   5
+      OVEREXTENDED       1
+
+  Sub-score correlation matrix (Pearson):
+                 valuation_score  quality_score  growth_score  sentiment_score
+valuation_score             1.00           0.33         -0.24            -0.11
+quality_score               0.33           1.00         -0.14            -0.20
+growth_score               -0.24          -0.14          1.00             0.11
+sentiment_score            -0.11          -0.20          0.11             1.00
+
+  Sub-score mutual-information matrix (normalized MI, 0-1):
+              V       Q       G       S
+        V     1.00   0.06   0.04   0.02
+        Q     0.06   1.00   0.04   0.02
+        G     0.04   0.04   1.00   0.02
+        S     0.02   0.02   0.02   1.00
+  Non-linear coupling flags (|nMI| - |Pearson| > 0.15):
+    (none — Pearson captures available codependence)
+  Per-sector highest |correlation|:
+    consumer_disc       valuation_score    vs growth_score        = -0.28
+    consumer_staples    valuation_score    vs growth_score        = -0.34
+    energy              valuation_score    vs sentiment_score     = -0.35
+    healthcare          valuation_score    vs quality_score       = +0.70
+    industrials         quality_score      vs sentiment_score     = -0.27
+    non_bank_financial  valuation_score    vs sentiment_score     = -0.38
+    reits               growth_score       vs sentiment_score     = -0.32
+    tech_hardware       quality_score      vs sentiment_score     = -0.49
+    tech_software       valuation_score    vs growth_score        = -0.51
+    utilities           quality_score      vs sentiment_score     = +0.41
+  Cached 2514 stocks to C:\Users\fraun\OneDrive\Documents\Stock Evaluator\data\stock_cache.db
+  Stocks per sector_group:
+    industrials            571
+    healthcare             451
+    consumer_disc          360
+    tech_software          309
+    reits                  171
+    tech_hardware          170
+    energy                 159
+    consumer_staples       122
+    non_bank_financial     114
+    utilities               55
+    banks                   19
+    (none)                  13
+  FMP oracle: fetched_at=2026-07-08T03:56:59+00:00  active-quote-fresh=59  delisted-authoritative=0  unknown-defer-to-heuristic=448
+  Liveness: 2002 live / 448 delisted (oracle+heuristic) / 59 unpriced (active, no local price) / 0 unknown (+5 stale-gap) (prices_live coverage 87%, table max 2026-07-07)
+  Note: 59 UNPRICED names are FMP-confirmed active but absent from prices_live. Consider a secondary price source (e.g. FMP quote refresh, NYSE short-interest CSV) so these live names can enter portfolios.
+  Wrote DELISTED audit: delisted_exclusions_20260710.csv (448 names)
+  Wrote UNPRICED audit: unpriced_review_20260710.csv (59 names)
+
+  Stock Universe: 2514 tickers (Market Cap > $300,000,000)
+  Sectors available: Banks, Consumer Disc, Consumer Staples, Energy, Healthcare, Industrials, Non-Bank Financial, REITs, Tech (Hardware), Tech (Software), Utilities
+
+  Type a query or "help" for examples, "quit" to exit.
+  > 
+  Done.

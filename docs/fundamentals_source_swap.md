@@ -1,14 +1,99 @@
-# Live-screener annual fundamentals: SimFin → FMP (Option B, flag-gated)
+# Live-screener annual fundamentals: SimFin → FMP (Option B + Option C, DEFAULT-ON)
 
-## What changed
+## What changed (current state, go-live)
 
-`src/market_screener.py:main()` gained an env-var gate:
+`src/market_screener.py:main()` swaps annual income/balance/cashflow to FMP by DEFAULT via `src/fmp_mapping.py:load_annual_with_fallback`. The env var is now a rollback SWITCH:
 
 ```
-USE_FMP_FUNDAMENTALS=1  →  annual income/balance/cashflow come from FMP
-                            (via src/fmp_mapping.py:load_annual_with_fallback)
-USE_FMP_FUNDAMENTALS unset (default) →  bit-identical SimFin behavior
+(no env var, or =1, or =true, or =yes)  →  FMP annual (physical-period keyed) + SimFin quarterly/TTM  [DEFAULT]
+USE_FMP_FUNDAMENTALS=0 (or off/false/no) →  SimFin (all)  [ROLLBACK]
 ```
+
+**Rollback (one-liner):** set `USE_FMP_FUNDAMENTALS=0` in the environment before invoking the screener. No code change; SimFin path returns instantly. Verified: the rollback reproduces the pre-flip SimFin top decile.
+
+## What did NOT change
+
+- **Scoring math** (`compute_potential_scores_v2`, `_rank_within`, weights, regime, decay) — zero edits.
+- **`compute_history_metrics_full` / `aggregate_history_metrics`** — zero edits.
+- **TTM path** — `compute_ttm(income_q, cashflow_q)` continues to consume SimFin quarterly. VERIFIED 100% identical between A/B runs: `ebitda_ttm`, `net_income_ttm`, `revenue_ttm`, `fcf_ttm`, `revenue_growth_yoy_q`.
+- **Backtest** — `scripts/backtest.v2.py`, `scripts/backtest.py` neither import `src.fmp_mapping` nor read `data/fmp/fundamentals_*.csv`. Firewall grep still empty.
+
+## Physical-period-keyed merge (Option C, replaces the initial FY-label merge)
+
+The initial (Ticker, Fiscal Year)-keyed merge had a class-level bug: **SimFin labels a fiscal year by calendar-year-of-START; FMP by calendar-year-of-END.** For off-calendar filers (retailers with Jan/Feb year-ends, biotech with mid-year year-ends), the same physical filing gets different FY labels — proven on GIII where FMP FY(N) = SimFin FY(N-1) with identical Revenue/CurLiab/NI values dated 2021-01-31 on both sources. Under the FY-key merge, the SimFin "gap-fill" row was the SAME physical filing as the neighbouring FMP row, duplicating one physical period and inflating GIII's growth_score 71.75 → 88.36 purely as a labeling artifact. Affected class: 39 tickers with FY-end-month disagreement (LULU, PLAY, CHWY, PVH, SLAB, CRI, HLIO, WLDN, EYE, JOUT, ARMK, MTSI, ROIV, SLDP, VCEL, ...).
+
+**Fix — merge is keyed on `(Ticker, Report Date)` with a 10-day tolerance window:**
+
+- Both sources expose the physical fiscal-period-end date. SimFin `Report Date`; FMP `date` (extended into the mapper as `Report Date` too).
+- Two rows collapse when their report dates are within 10 days, treating them as the same physical period. FMP wins the collapse; SimFin is used only when FMP has no row within tolerance of a SimFin row.
+- Post-merge Fiscal Year label = year the fiscal period ENDS (calendar year of Report Date). This matches FMP's convention and produces a single consistent FY label per physical period.
+
+Measured on the current (2026-07-10) full SimFin universe:
+
+| Signal | Value |
+|---|---|
+| Collapse events on income statement (exact date match) | 13 154 |
+| Collapse events on income statement (within 10 days) | 994 |
+| Universe tickers with duplicated PHYSICAL period in scoring window | **0** |
+| Tickers with duplicated FY-LABEL (fiscal-year-change filers like AAP, BBBY, CAKE, EYE, HBI) | 33 |
+| Mixed-source-history tickers (last-5-window mixes FMP and SF) | 17 / 4390 (0.4%) |
+
+The 33 FY-label-duplicated tickers are cases where a filer changed fiscal-year-end during a calendar year, producing two physical periods with the same year-of-END label. Downstream `compute_history_metrics_full`'s `drop_duplicates(keep='last')` collapses these to the most-recent physical period — the earlier period is dropped from that ticker's window. Documented, 0.75% of universe, not blocking.
+
+## Live/backtest keying difference (documented, benign)
+
+The LIVE screener now keys annual fundamentals on physical Report Date and uses year-of-END for the Fiscal Year label. The BACKTEST (`scripts/backtest.v2.py`) still uses SimFin's original FY labels (calendar-year-of-START on off-calendar filers). For an off-calendar filer (LULU, GIII, VCEL, ROIV, ...), a live score and its backtest counterpart may reference the SAME physical fiscal period under DIFFERENT FY labels. **This is the intended firewall behavior** — do NOT reconcile the live and backtest FY labels for these tickers; they are talking about the same physical filing under two labeling conventions.
+
+## Verification pack (MEASURED)
+
+### GIII spot-check (the class canary)
+
+Under the buggy FY-key merge: growth_score 71.75 → 88.36 (+16.61pp, labeling artifact from duplicated 2021-01-31 filing).
+Under the physical-period key at `max_fiscal_year=2025` (live-mode proxy): growth_score 76.22 → 75.46 (**Δ-0.76**). Artifact eliminated.
+
+Retailer siblings under physical-period key at live-mode proxy:
+
+| Ticker | growth A (SF) | growth B (FMP) | Δ |
+|---|---|---|---|
+| GIII | 76.22 | 75.46 | -0.76 |
+| LULU | 86.19 | 88.50 | +2.31 |
+| CHWY | 88.34 | 90.04 | +1.70 |
+| TJX | 77.47 | 77.93 | +0.46 |
+| TPR | 47.45 | 37.39 | -10.06 |
+
+TPR moving materially in the DOWN direction (was +27.60 under buggy) confirms label-artifact removal.
+
+### Full A/B under live-mode proxy (`max_fiscal_year=2025`)
+
+2157 tickers scored on both paths.
+
+| Subscore | ρ | mean\|Δ\| | median\|Δ\| |
+|---|---|---|---|
+| valuation_score | 0.9723 | 2.33 | 0.63 |
+| quality_score | 0.9245 | 4.27 | 1.69 |
+| growth_score | 0.8662 | 7.42 | 3.39 |
+| sentiment_score | **1.0000** | 0.00 | 0.00 |
+| **potential_score** | **0.9342** | 2.58 | 1.01 |
+
+Decile migration 31.3%; within ±1 decile 92.4%.
+Top-decile Jaccard = 0.6615 (216 each, overlap 172).
+
+Lower Jaccard vs the initial Option B result reflects a **legitimate data-availability win**: FMP has FY2025 data for ~850 tickers that SimFin's bulk CSV hasn't loaded yet (FY2025 covers only 146/4390 SF tickers). Live users under FMP see current-year data 6-12 months earlier for off-calendar filers.
+
+### Go-live run — top 10 (excluding DELISTED / UNPRICED)
+
+Under default (FMP): RIGL, LRN, PPC, APP, NUTX, IDCC, MKC, YOU, IONQ, TCOM. All tradeable.
+
+Under rollback (`USE_FMP_FUNDAMENTALS=0`): LRN, CPRX, PPC, MASI, SGFY, OTTR, JFIN, MNDY, IDCC, MKC. Reproduces the SimFin baseline. Rollback works.
+
+### Firewall re-verification (post-flip)
+
+```
+$ grep -nE "fmp_mapping|load_annual_with_fallback|USE_FMP_FUNDAMENTALS|data/fmp/fundamentals" scripts/backtest.v2.py scripts/backtest.py
+(empty)
+```
+
+Backtest still SimFin-only. `phase5-frozen` tag intact.
 
 The swap sits between `load_simfin_data()` (which still loads all SimFin frames as the fallback base) and `compute_history_metrics(income, balance, cashflow)`. Only the three ANNUAL frames are swapped; everything else — companies, industries, prices, ownership, momentum, regime, and importantly the **quarterly income + quarterly cashflow that feed `compute_ttm` and `compute_quarterly_yoy_growth`** — stays SimFin-sourced.
 
