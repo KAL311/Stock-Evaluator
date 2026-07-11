@@ -1,15 +1,16 @@
 A/B verification summary — USE_FMP_FUNDAMENTALS off vs on (MEASURED)
 ======================================================================
 tickers scored on both paths: 2157
-  valuation_score      n=2157  rho=0.9723  mean|delta|=  2.33  median|delta|=  0.63
-  quality_score        n=2134  rho=0.9245  mean|delta|=  4.27  median|delta|=  1.69
-  growth_score         n=1722  rho=0.8662  mean|delta|=  7.42  median|delta|=  3.39
+  valuation_score      n=2157  rho=0.9644  mean|delta|=  3.03  median|delta|=  0.95
+  quality_score        n=2134  rho=0.9196  mean|delta|=  4.29  median|delta|=  1.75
+  growth_score         n=1723  rho=0.9113  mean|delta|=  5.60  median|delta|=  2.21
   sentiment_score      n=2157  rho=1.0000  mean|delta|=  0.00  median|delta|=  0.00
-  potential_score      n=2157  rho=0.9342  mean|delta|=  2.58  median|delta|=  1.01
+  potential_score      n=2157  rho=0.9550  mean|delta|=  2.23  median|delta|=  1.01
 
-Decile migration: 31.3%   within ±1 decile: 92.4%
-Top-decile Jaccard: 0.6615  |A|=216  |B|=216  overlap=172
-Names ENTERING top decile under B (not in A) — 44:
-  ALV, ANF, APH, APP, AVPT, BCRX, BSX, CAKE, CPE, CTRE, CWAN, DECK, DORM, ENSG, EPRT, ETSY, FSLR, GM, GMS, HSAI, HWM, IBRX, INTU, ITCI, ITRI, KROS, MSFT, NTNX, NWE, PGY, PRGS, PVAC, QCOM, RIGL, SHW, SPOT, TPX, TRIN, UBER, VCTR, VERV, VRDN, WWD, WWE
-Names LEAVING top decile under B (in A but not B) — 44:
-  ABG, AGR, AMPH, AN, ARQT, ATO, AXSM, BLD, BMI, BRO, CAPR, CNK, CPRI, CROX, DX, ECOM, FOX, GAMB, HCCI, HGV, HUBB, INGR, IRMD, JFIN, LAD, MASI, MOH, MRO, NEX, PAG, PANW, PAYC, PR, PTGX, RH, RITM, SGFY, STLA, STM, TGTX, TSLA, TW, UPWK, WDFC
+Tradeable-only (DELISTED/UNPRICED excluded): 1730 of 2157 scored
+Decile migration: 32.7%   within ±1 decile: 93.1%
+Top-decile Jaccard: 0.7387  |A|=173  |B|=173  overlap=147
+Names ENTERING top decile under B (not in A) — 26:
+  ANAB, APH, BKE, CAKE, DGII, DORM, EPRT, FIVE, GEN, GIII, HST, HTGC, IBRX, ITRI, LYV, MPLX, MSGE, NFLX, NTNX, NWE, OC, RTX, SIGA, TJX, TPR, TRIN
+Names LEAVING top decile under B (in A but not B) — 26:
+  ABG, ADP, AGX, AMPH, AN, BBIO, BMY, CME, CPRI, DX, FHI, GAMB, GE, GTX, HGV, MASI, MTDR, PAG, PEN, PR, RDVT, RH, RITM, SITC, STM, WDFC

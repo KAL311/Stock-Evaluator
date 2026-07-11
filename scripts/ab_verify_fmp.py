@@ -164,16 +164,33 @@ def main():
                     f"mean|delta|={mad:>6.2f}  median|delta|={med:>6.2f}"
                 )
     if len(scored) >= 10:
-        scored["dec_A"] = pd.qcut(scored["potential_score_A"].rank(method="first"), 10, labels=False) + 1
-        scored["dec_B"] = pd.qcut(scored["potential_score_B"].rank(method="first"), 10, labels=False) + 1
-        mig = (scored["dec_A"] != scored["dec_B"]).mean() * 100
-        within1 = ((scored["dec_A"] - scored["dec_B"]).abs() <= 1).mean() * 100
-        top_a = set(scored[scored["dec_A"] == 10]["ticker"])
-        top_b = set(scored[scored["dec_B"] == 10]["ticker"])
+        # Apply the diagnostic tradeable-flag filter so DELISTED/UNPRICED zombies
+        # (e.g. SGFY / AAWW / CTRA) don't pollute the audit lists. See
+        # src/diagnostic_filters.py — production print_table already does this.
+        try:
+            import sqlite3
+            conn = sqlite3.connect(str(REPO_ROOT / "data" / "stock_cache.db"))
+            flags_map = dict(conn.execute("SELECT ticker, flags FROM stocks").fetchall())
+            conn.close()
+            from src.diagnostic_filters import is_tradeable_flag  # noqa: E402
+            scored["_tradeable"] = scored["ticker"].map(
+                lambda t: is_tradeable_flag(flags_map.get(t))
+            )
+            scored_tradeable = scored[scored["_tradeable"]].copy()
+        except Exception as e:
+            print(f"    (flags-filter unavailable: {e}; leaving lists unfiltered)")
+            scored_tradeable = scored.copy()
+        scored_tradeable["dec_A"] = pd.qcut(scored_tradeable["potential_score_A"].rank(method="first"), 10, labels=False) + 1
+        scored_tradeable["dec_B"] = pd.qcut(scored_tradeable["potential_score_B"].rank(method="first"), 10, labels=False) + 1
+        mig = (scored_tradeable["dec_A"] != scored_tradeable["dec_B"]).mean() * 100
+        within1 = ((scored_tradeable["dec_A"] - scored_tradeable["dec_B"]).abs() <= 1).mean() * 100
+        top_a = set(scored_tradeable[scored_tradeable["dec_A"] == 10]["ticker"])
+        top_b = set(scored_tradeable[scored_tradeable["dec_B"] == 10]["ticker"])
         jac = len(top_a & top_b) / max(1, len(top_a | top_b))
         entering = sorted(top_b - top_a)
         leaving = sorted(top_a - top_b)
-        lines.append(f"\nDecile migration: {mig:.1f}%   within ±1 decile: {within1:.1f}%")
+        lines.append(f"\nTradeable-only (DELISTED/UNPRICED excluded): {len(scored_tradeable)} of {len(scored)} scored")
+        lines.append(f"Decile migration: {mig:.1f}%   within ±1 decile: {within1:.1f}%")
         lines.append(f"Top-decile Jaccard: {jac:.4f}  |A|={len(top_a)}  |B|={len(top_b)}  overlap={len(top_a & top_b)}")
         lines.append(f"Names ENTERING top decile under B (not in A) — {len(entering)}:")
         lines.append("  " + ", ".join(entering[:60]) + (" ..." if len(entering) > 60 else ""))

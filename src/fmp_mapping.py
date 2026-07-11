@@ -368,9 +368,57 @@ def load_annual_with_fallback(
     fmp_b = map_balance(None if fmp_dir is None else fmp_dir / "fundamentals_balance.csv")
     fmp_c = map_cashflow(None if fmp_dir is None else fmp_dir / "fundamentals_cashflow.csv")
 
+    # --- Non-USD routing (Option b for the currency bug in commit 0c4d0f6) ---
+    # FMP preserves reportedCurrency (CNY / EUR / CAD / GBP / JPY / INR / ...);
+    # SimFin normalizes everything to USD. Under the mixed live pipeline,
+    # market_cap is USD (price × shares) but FMP revenue for a non-USD filer is
+    # in local currency → P/S mis-scaled by the FX ratio (TCOM V=100 on CNY).
+    # Fix: for tickers where reportedCurrency != USD, do NOT enter the FMP
+    # branch. Route the whole ticker wholesale to SimFin's already-
+    # USD-normalized annual fundamentals — no intra-ticker mixing that would
+    # re-introduce a cross-source problem.
+    non_usd_tickers: set[str] = set()
+    currency_breakdown: dict[str, list[str]] = {}
+    raw_inc_csv = (fmp_dir or FMP_DIR) / "fundamentals_income.csv"
+    if raw_inc_csv.exists():
+        _raw = pd.read_csv(
+            raw_inc_csv, usecols=["ticker", "reportedCurrency"], dtype=str
+        )
+        # A ticker is NON_USD if ANY reported currency for it is non-USD and
+        # non-null. That guards against tickers where FMP sometimes tags USD
+        # and sometimes local (rare but seen).
+        for tk, group in _raw.dropna(subset=["reportedCurrency"]).groupby("ticker"):
+            curs = set(group["reportedCurrency"].str.upper())
+            non_usd = curs - {"USD"}
+            if non_usd:
+                non_usd_tickers.add(str(tk).upper())
+                for c in non_usd:
+                    currency_breakdown.setdefault(c, []).append(str(tk).upper())
+
+    if verbose and non_usd_tickers:
+        curr_summary = ", ".join(
+            f"{c}={len(v)}" for c, v in sorted(currency_breakdown.items(),
+                                               key=lambda kv: -len(kv[1]))
+        )
+        print(
+            f"  NON_USD fallback: {len(non_usd_tickers)} tickers routed to SimFin "
+            f"(currencies: {curr_summary})"
+        )
+        # Preview a few names for auditability
+        sample_names = sorted(non_usd_tickers)[:10]
+        print(f"    e.g. {sample_names}")
+
+    # Filter FMP frames to drop non-USD tickers. The downstream blend then
+    # sees them as "FMP-empty" and takes SimFin wholesale.
+    if non_usd_tickers:
+        fmp_i = fmp_i[~fmp_i["Ticker"].isin(non_usd_tickers)].copy()
+        fmp_b = fmp_b[~fmp_b["Ticker"].isin(non_usd_tickers)].copy()
+        fmp_c = fmp_c[~fmp_c["Ticker"].isin(non_usd_tickers)].copy()
+
     stats = {"collapsed_exact": 0, "collapsed_within_tol": 0,
              "fmp_only_periods": 0, "sf_only_periods": 0,
-             "total_periods_out": 0, "dup_period_tickers": 0}
+             "total_periods_out": 0, "dup_period_tickers": 0,
+             "non_usd_routed": len(non_usd_tickers)}
 
     def _blend(
         sf: pd.DataFrame,

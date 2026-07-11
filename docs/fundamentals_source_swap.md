@@ -40,6 +40,29 @@ Measured on the current (2026-07-10) full SimFin universe:
 
 The 33 FY-label-duplicated tickers are cases where a filer changed fiscal-year-end during a calendar year, producing two physical periods with the same year-of-END label. Downstream `compute_history_metrics_full`'s `drop_duplicates(keep='last')` collapses these to the most-recent physical period — the earlier period is dropped from that ticker's window. Documented, 0.75% of universe, not blocking.
 
+## Non-USD ADR routing (currency-bug fix, Option b)
+
+FMP preserves each filer's `reportedCurrency`; SimFin normalizes ALL 4390 tickers to USD. On 19 non-USD ADRs (7 CNY, 4 EUR, 3 CAD, 2 GBP, 2 JPY, 1 INR — TCOM, SAP, STLA, NIO, NTES, WIT, HMC, TM, GDS, HUYA, IMCR, IMO, HSAI, DAVA, JFIN, MRUS, SNDL, SPOT, ENB) the FMP-native path put local-currency revenue against a USD `market_cap`, mis-scaling P/S by the FX ratio. TCOM under the buggy path: FMP FY2024 rev = 53.294B CNY vs SimFin 7.066B USD (~7.5×) → V pinned at 100.
+
+**Fix (commit `[current]`):** `load_annual_with_fallback` reads `reportedCurrency` from the FMP income CSV before merging. Any ticker whose FMP filings are not USD-denominated is filtered OUT of the FMP frames and takes the SimFin branch wholesale (no intra-ticker mixing that would re-open the physical-period-key problem). Startup line prints:
+
+```
+NON_USD fallback: 19 tickers routed to SimFin (currencies: CNY=7, EUR=4, CAD=3, GBP=2, JPY=2, INR=1)
+    e.g. ['DAVA', 'ENB', 'GDS', 'HMC', 'HSAI', 'HUYA', 'IMCR', 'IMO', 'JFIN', 'MRUS']
+```
+
+TCOM valuation post-fix: V=48.3 (matches SF-baseline V=46.0, +2pp peer-cohort shift). No non-USD ADR ranks on a mis-scaled valuation in the FMP top-20 anymore.
+
+USD tickers unaffected in direct terms; peer-cohort percentile ranks may shift ±0.1-0.5pp (rank cohort loses the artificially-inflated non-USD peers). Spot-checked: RIGL 75.34 → 75.35, APP 72.35 → 72.26, IDCC 70.91 → 70.91.
+
+Edge case handled: if a non-USD ticker has no SimFin data either, it gets no fundamentals — the existing missing-data handling (staleness gate, insufficient coverage drop) applies. No non-USD ticker currently in this state.
+
+## Diagnostic flag-filter helper (SGFY hygiene)
+
+`src/diagnostic_filters.py` provides `tradeable_sql_filter()` and `is_tradeable_flag()` / `filter_tradeable(df)` for ad-hoc top-N queries. Any diagnostic query that ranks by `potential_score` should apply this filter so DELISTED / UNPRICED zombies (SGFY, AAWW, CTRA) don't pollute the audit list. `scripts/ab_verify_fmp.py` was updated to use it in its entering/leaving summary.
+
+Production `print_table` / `execute_query` in `src/market_screener.py` already respect flags — those paths are UNCHANGED.
+
 ## Live/backtest keying difference (documented, benign)
 
 The LIVE screener now keys annual fundamentals on physical Report Date and uses year-of-END for the Fiscal Year label. The BACKTEST (`scripts/backtest.v2.py`) still uses SimFin's original FY labels (calendar-year-of-START on off-calendar filers). For an off-calendar filer (LULU, GIII, VCEL, ROIV, ...), a live score and its backtest counterpart may reference the SAME physical fiscal period under DIFFERENT FY labels. **This is the intended firewall behavior** — do NOT reconcile the live and backtest FY labels for these tickers; they are talking about the same physical filing under two labeling conventions.
