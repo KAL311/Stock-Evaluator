@@ -4582,7 +4582,68 @@ def main():
         or '--pipeline-only' in sys.argv
         or os.environ.get('SCREENER_NO_REPL', '').strip().lower() in ('1', 'true', 'yes')
     )
-    if not no_repl:
+    if no_repl:
+        # Emit a single machine-readable status line so scripts/run_daily.py
+        # can build the health log from THIS run's numbers directly rather
+        # than scraping fragile human-readable prints. Print-only surface;
+        # no scoring or gate change. Counts derived from df.flags after
+        # compute_liveness_and_flag has run.
+        import json as _json
+        try:
+            _flags = df.get('flags')
+            def _cnt(sub):
+                if _flags is None:
+                    return 0
+                return int(_flags.fillna('').astype(str).str.contains(sub, na=False).sum())
+            n_universe = len(df)
+            n_del = _cnt('DELISTED')
+            n_unpriced = _cnt('UNPRICED')
+            n_unknown = _cnt('UNKNOWN')
+            n_live = n_universe - n_del - n_unpriced - n_unknown
+            # Coverage: distinct tickers with prices_live in the last 10 days.
+            _cov = None
+            try:
+                _cx = sqlite3.connect(str(CACHE_DB))
+                _cov_row = _cx.execute(
+                    "SELECT COUNT(DISTINCT ticker) FROM prices_live "
+                    "WHERE date >= date('now','-10 days')"
+                ).fetchone()
+                _cx.close()
+                if _cov_row and n_universe:
+                    _cov = _cov_row[0] / n_universe * 100
+            except Exception:
+                pass
+            # Non-USD + mixed-source come from fmp_mapping module attribute
+            _non_usd = 0
+            _mixed = 0
+            try:
+                from src import fmp_mapping as _fm
+                _non_usd = int(_fm.LAST_LOAD_STATS.get('non_usd_count', 0) or 0)
+                _mixed = int(_fm.LAST_LOAD_STATS.get('mixed_source_tickers', 0) or 0)
+            except Exception:
+                pass
+            # Read env at emit time so this works for both cache-hit and
+            # cache-rebuild paths (use_fmp_fund is scoped to the rebuild
+            # branch above and may be undefined on cache-hit).
+            _fmp_env = os.environ.get('USE_FMP_FUNDAMENTALS', '').strip().lower()
+            _src = 'SimFin' if _fmp_env in ('0','off','false','no') else 'FMP'
+            _payload = {
+                "source": _src,
+                "universe": int(n_universe),
+                "live": int(n_live),
+                "delisted": int(n_del),
+                "unpriced": int(n_unpriced),
+                "unknown": int(n_unknown),
+                "coverage_pct": round(_cov, 1) if _cov is not None else None,
+                "non_usd_fallback": _non_usd,
+                "mixed_source": _mixed,
+                "regime": _regime,
+                "cache_updated_at": datetime.now().isoformat(timespec="seconds"),
+            }
+            print("HEALTH_JSON=" + _json.dumps(_payload))
+        except Exception as _e:
+            print(f"HEALTH_JSON_ERROR={_e!r}")
+    else:
         interactive_loop(df)
     print('  Done.')
 

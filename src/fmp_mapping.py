@@ -549,8 +549,19 @@ def load_annual_with_fallback(
         if len(set(srcs)) > 1:
             mixed_tickers.append(t)
 
+    n_total = merged_i.index.get_level_values(0).nunique()
+    stats["mixed_source_tickers"] = len(mixed_tickers)
+    stats["universe_annual"] = n_total
+    # Publish stats + non-USD info at module level so scripts/market_screener
+    # can build the HEALTH_JSON line without re-scraping stdout.
+    global LAST_LOAD_STATS  # noqa: PLW0603
+    LAST_LOAD_STATS = {
+        **stats,
+        "non_usd_count": len(non_usd_tickers),
+        "non_usd_currencies": {c: len(v) for c, v in currency_breakdown.items()},
+    }
+
     if verbose:
-        n_total = merged_i.index.get_level_values(0).nunique()
         print(
             f"  FMP fundamentals (physical-period keyed, ±{date_tolerance_days}d tolerance):"
         )
@@ -573,6 +584,11 @@ def load_annual_with_fallback(
         )
 
     return merged_i, merged_b, merged_c
+
+
+# Populated by load_annual_with_fallback each time it runs. Read by
+# src/market_screener.py to emit HEALTH_JSON in --no-repl mode.
+LAST_LOAD_STATS: dict = {}
 
 
 # ---------- Self-check ----------

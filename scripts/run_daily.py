@@ -113,47 +113,51 @@ def _run_step(
     return True, out
 
 
-def _parse_screener_output(out: str) -> dict[str, str]:
-    """Pull the counts printed by market_screener into a small dict.
-
-    Grep patterns match the actual log strings, not a spec. If the screener
-    log format changes, this function silently returns empty strings for the
-    missing fields and the corresponding WARN fires elsewhere.
+def _parse_screener_health_json(out: str) -> dict:
+    """Extract the authoritative HEALTH_JSON line emitted by
+    src/market_screener.py in --no-repl mode. Returns {} if absent — the
+    caller must WARN when that happens; there is no silent-blanks fallback.
     """
-    info: dict[str, str] = {}
+    m = re.search(r"^HEALTH_JSON=(\{.*\})\s*$", out, re.MULTILINE)
+    if not m:
+        return {}
+    try:
+        return json.loads(m.group(1))
+    except json.JSONDecodeError:
+        return {}
 
-    m = re.search(r"FUNDAMENTALS SOURCE:\s*(FMP.*|SimFin.*)", out)
+
+def _parse_price_refresh_output(out: str) -> dict:
+    """Extract yfinance refresh stats. Format from scripts/refreshprice.py:
+      "Refreshing N tickers ..." at start
+      "WARNING: K tickers returned no data: ..." near end (if any failed)
+    """
+    info: dict = {}
+    m = re.search(r"Refreshing\s+(\d+)\s+tickers", out)
     if m:
-        source = m.group(1)
-        info["source"] = "FMP" if source.startswith("FMP") else "SimFin"
-
-    m = re.search(r"NON_USD fallback:\s*(\d+) tickers routed to SimFin", out)
+        info["refresh_universe"] = int(m.group(1))
+    m = re.search(r"(\d+)\s+tickers returned no data", out)
     if m:
-        info["non_usd_fallback"] = m.group(1)
+        info["refresh_failed"] = int(m.group(1))
+    if "refresh_universe" in info:
+        failed = info.get("refresh_failed", 0)
+        info["ok_pct"] = round(
+            (info["refresh_universe"] - failed) / info["refresh_universe"] * 100, 1
+        ) if info["refresh_universe"] else 0.0
+    return info
 
-    m = re.search(r"mixed-source-history tickers:\s*(\d+)/(\d+)", out)
-    if m:
-        info["mixed_source"] = m.group(1)
-        info["universe_annual"] = m.group(2)
 
-    m = re.search(r"Processed\s+(\d+)\s+stocks", out)
-    if m:
-        info["universe"] = m.group(1)
-
-    m = re.search(r"Scored\s+(\d+)\s*/\s*(\d+)\s+stocks", out)
-    if m:
-        info["scored"] = m.group(1)
-        info["universe"] = info.get("universe") or m.group(2)
-
-    # FMP fetcher — surface effective_rate + failures for the health log
+def _parse_fetch_output(out: str) -> dict:
+    """Effective rate + api_calls + cache_hits from
+    scripts/fetch_fundamentals_fmp.py."""
+    info: dict = {}
     m = re.search(r"effective_rate=(\d+)/min", out)
     if m:
-        info["fetch_rate"] = m.group(1)
+        info["fetch_rate"] = int(m.group(1))
     m = re.search(r"api_calls=(\d+) cache_hits=(\d+)", out)
     if m:
-        info["fetch_api_calls"] = m.group(1)
-        info["fetch_cache_hits"] = m.group(2)
-
+        info["fetch_api_calls"] = int(m.group(1))
+        info["fetch_cache_hits"] = int(m.group(2))
     return info
 
 
@@ -415,51 +419,73 @@ def main() -> int:
         except Exception as e:
             warns.append(f"ARCHIVE_COPY_FAILED={e}")
 
-    # ---- Health line ----
+    # ---- Health line (built from THIS run's authoritative sources) ----
     joined = "\n".join(all_output)
-    info = _parse_screener_output(joined)
+    # 1. Screener HEALTH_JSON is the source of truth for source/universe/
+    #    live/delisted/unpriced/unknown/coverage/non_usd_fallback/mixed_source.
+    hj = _parse_screener_health_json(joined)
+    if not hj:
+        warns.append("NO_HEALTH_JSON")
+    # 2. Price refresh stats from this run's step 1 output.
+    price_stats = _parse_price_refresh_output(joined)
+    # 3. Fetch stats.
+    fetch_stats = _parse_fetch_output(joined)
 
-    # Enrich with cache-derived counts
-    coverage = _coverage_pct()
-    live, delisted, unpriced = _flag_counts()
-
-    # Top-10 turnover
+    # Turnover — cache-based (needs cache anyway to know top 10)
     today_top10 = _current_top10_tradeable()
     prev_top10 = _load_prev_top10()
     turnover = len(set(today_top10) ^ set(prev_top10)) // 2 if prev_top10 else -1
     _save_top10(today_top10)
 
-    # WARN conditions
-    if coverage is not None and coverage < 85:
-        warns.append(f"LOW_COVERAGE={coverage:.1f}%")
-    if not info.get("source"):
-        warns.append("SOURCE_LINE_MISSING")
-    elif (info["source"] == "SimFin") != (not default_is_fmp):
-        warns.append(f"SOURCE_MISMATCH={info['source']}")
-    if live == 0:
+    source = hj.get("source", "?")
+    universe = hj.get("universe", "?")
+    live = hj.get("live", "?")
+    delisted = hj.get("delisted", "?")
+    unpriced = hj.get("unpriced", "?")
+    unknown = hj.get("unknown", 0)
+    coverage = hj.get("coverage_pct")
+    non_usd = hj.get("non_usd_fallback", "-")
+    mixed = hj.get("mixed_source", "-")
+
+    # WARN conditions — coverage bands (loud/marginal/watch)
+    if coverage is not None:
+        if coverage < 80:
+            warns.append(f"COVERAGE_LOW={coverage:.1f}%")
+        elif coverage < 85:
+            warns.append(f"COVERAGE_MARGINAL={coverage:.1f}%")
+        elif coverage < 90:
+            warns.append(f"COVERAGE_WATCH={coverage:.1f}%")
+    if source != "?" and (source == "SimFin") != (not default_is_fmp):
+        warns.append(f"SOURCE_MISMATCH={source}")
+    if isinstance(live, int) and live == 0:
         warns.append("NO_LIVE_TICKERS_SCORED")
-    if info.get("fetch_api_calls") and int(info.get("fetch_api_calls", 0)) > 0:
-        # A partial fetch would show many API calls PLUS a fails counter.
-        # The existing fetcher log surfaces it — pass through as WARN only if
-        # the failure log grew.
+    if fetch_stats.get("fetch_api_calls", 0) > 0:
         fetch_fails_log = REPO_ROOT / "data" / "fmp" / "fetch_failures.log"
         if fetch_fails_log.exists() and fetch_fails_log.stat().st_size > 0:
             warns.append("FETCH_HAS_FAILURES")
+    # yfinance degradation warn
+    price_ok_pct = price_stats.get("ok_pct")
+    if price_ok_pct is not None and price_ok_pct < 85:
+        warns.append(f"PRICE_FETCH_DEGRADED={price_ok_pct:.1f}%")
 
-    status = "OK" if not any(w.startswith("STEP_FAILED") for w in warns) else "FAILED"
+    status = "OK" if not any(
+        w.startswith("STEP_FAILED") or w == "NO_HEALTH_JSON" for w in warns
+    ) else "FAILED"
     warn_str = f" | WARN={','.join(warns)}" if warns else ""
     duration = time.time() - t0
 
     cov_str = f"{coverage:.1f}%" if coverage is not None else "-"
     turn_str = str(turnover) if turnover >= 0 else "-"
+    price_ok_str = f"{price_ok_pct:.1f}%" if price_ok_pct is not None else "-"
     health_line = (
         f"{ts} | STATUS={status}"
-        f" | source={info.get('source', '?')}"
-        f" | universe={info.get('universe', '?')}"
-        f" | live={live} delisted={delisted} unpriced={unpriced}"
+        f" | source={source}"
+        f" | universe={universe}"
+        f" | live={live} delisted={delisted} unpriced={unpriced} unknown={unknown}"
         f" | coverage={cov_str}"
-        f" | non_usd_fallback={info.get('non_usd_fallback', '-')}"
-        f" | mixed_source={info.get('mixed_source', '-')}"
+        f" | price_fetch_ok_pct={price_ok_str}"
+        f" | non_usd_fallback={non_usd}"
+        f" | mixed_source={mixed}"
         f" | top10_turnover_vs_prev={turn_str}"
         f" | duration={duration:.0f}s{warn_str}"
     )
@@ -468,12 +494,11 @@ def main() -> int:
 
     # Banner into dashboard
     banner = (
-        f"[{ts}] source={info.get('source', '?')} |"
-        f"universe={info.get('universe', '?')} |"
+        f"[{ts}] source={source} |"
+        f"universe={universe} |"
         f"live={live} |delisted={delisted} |unpriced={unpriced} |"
-        f"coverage={cov_str} |"
-        f"non_usd={info.get('non_usd_fallback', '-')} |"
-        f"mixed={info.get('mixed_source', '-')} |"
+        f"coverage={cov_str} |price_ok={price_ok_str} |"
+        f"non_usd={non_usd} |mixed={mixed} |"
         f"top10 turnover={turn_str}"
     )
     if warns:
