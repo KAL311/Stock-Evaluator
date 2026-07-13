@@ -3,6 +3,7 @@
 
 import argparse
 import json
+import math
 import os
 import sqlite3
 import sys
@@ -12,6 +13,34 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+
+
+def _sanitize_for_json(obj):
+    """Recursively coerce non-finite floats (NaN/Inf/-Inf) to None so the JSON
+    is spec-compliant for browser JSON.parse (which rejects NaN/Infinity)."""
+    if isinstance(obj, float):
+        return obj if math.isfinite(obj) else None
+    if isinstance(obj, dict):
+        return {k: _sanitize_for_json(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_sanitize_for_json(v) for v in obj]
+    if isinstance(obj, np.floating):
+        f = float(obj)
+        return f if math.isfinite(f) else None
+    return obj
+
+
+def _harden_for_script_embed(json_str):
+    """Make a JSON string safe to inline inside <script>...</script>.
+    Neutralizes '</' (which could early-close the tag) and JS line/paragraph
+    separators U+2028/U+2029 (illegal in JSON literals when embedded in JS).
+    All substitutions preserve JSON semantics after JSON.parse."""
+    return (
+        json_str
+        .replace("</", "<\\/")
+        .replace(" ", "\\u2028")
+        .replace(" ", "\\u2029")
+    )
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = ROOT / "data"
@@ -435,8 +464,10 @@ def build_html(meta, stocks_df, portfolios, price_history, chart_source_data,
         "freshness": freshness,
     }
 
-    json_data = json.dumps(data_blob, default=str)
+    json_data = json.dumps(_sanitize_for_json(data_blob), default=str, allow_nan=False)
+    json_data = _harden_for_script_embed(json_data)
     flag_tooltips_json = json.dumps(FLAG_TOOLTIPS)
+    flag_tooltips_json = _harden_for_script_embed(flag_tooltips_json)
 
     HTML = """
 <!DOCTYPE html>
