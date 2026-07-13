@@ -147,6 +147,18 @@ def _parse_price_refresh_output(out: str) -> dict:
     return info
 
 
+def _parse_fill_output(out: str) -> dict:
+    """FILL_JSON from scripts/fill_prices_fmp.py — captures the
+    price-gap fill counts and pre/post coverage."""
+    m = re.search(r"^FILL_JSON=(\{.*\})\s*$", out, re.MULTILINE)
+    if not m:
+        return {}
+    try:
+        return json.loads(m.group(1))
+    except json.JSONDecodeError:
+        return {}
+
+
 def _parse_fetch_output(out: str) -> dict:
     """Effective rate + api_calls + cache_hits from
     scripts/fetch_fundamentals_fmp.py."""
@@ -347,14 +359,25 @@ def main() -> int:
             warns.append(f"STEP_FAILED={name}")
         return ok
 
-    # 1. Prices
+    # 1. Prices (yfinance bulk)
     ok = step(
         "1_prices_refresh",
-        [PY, "-3" if os.name != "nt" else "-u",
-         "scripts/refreshprice.py", "--top", "0", "--period", "1y"]
-        if False else
         [PY, "-u", "scripts/refreshprice.py", "--top", "0", "--period", "1y"],
         skip=args.skip_prices,
+    )
+    if not ok:
+        _finalize_fail(t0, warns, all_output, ts)
+        return 3
+
+    # 1b. FMP quote-fill for tickers the yfinance pass missed. Requires
+    # listing oracle to know which tickers are ACTIVE (so we don't waste
+    # quotes on zombies). If oracle is stale here we still run — worst case
+    # a few skipped names get missed this run and are caught the next day.
+    ok = step(
+        "1b_fmp_quote_fill",
+        [PY, "-u", "scripts/fill_prices_fmp.py",
+         "--stale-days", "3", "--workers", "6", "--rate-per-min", "250"],
+        skip=args.skip_prices,  # skip together with step 1
     )
     if not ok:
         _finalize_fail(t0, warns, all_output, ts)
@@ -428,6 +451,8 @@ def main() -> int:
         warns.append("NO_HEALTH_JSON")
     # 2. Price refresh stats from this run's step 1 output.
     price_stats = _parse_price_refresh_output(joined)
+    # 2b. FMP quote-fill stats from step 1b.
+    fill_stats = _parse_fill_output(joined)
     # 3. Fetch stats.
     fetch_stats = _parse_fetch_output(joined)
 
@@ -477,6 +502,7 @@ def main() -> int:
     cov_str = f"{coverage:.1f}%" if coverage is not None else "-"
     turn_str = str(turnover) if turnover >= 0 else "-"
     price_ok_str = f"{price_ok_pct:.1f}%" if price_ok_pct is not None else "-"
+    fmp_fill = fill_stats.get("filled_fmp", "-")
     health_line = (
         f"{ts} | STATUS={status}"
         f" | source={source}"
@@ -484,6 +510,7 @@ def main() -> int:
         f" | live={live} delisted={delisted} unpriced={unpriced} unknown={unknown}"
         f" | coverage={cov_str}"
         f" | price_fetch_ok_pct={price_ok_str}"
+        f" | fmp_price_fill={fmp_fill}"
         f" | non_usd_fallback={non_usd}"
         f" | mixed_source={mixed}"
         f" | top10_turnover_vs_prev={turn_str}"
