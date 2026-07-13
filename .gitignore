@@ -72,3 +72,6 @@ data/stock_cache.db.*_backup
 /*].index.tolist*
 /*.tolist*
 /*),+
+
+reports/.last_top10.json
+reports/archive/

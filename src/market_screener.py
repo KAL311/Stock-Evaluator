@@ -4574,7 +4574,16 @@ def main():
     # (scripts/generate_html_report.py) see the DELISTED tag without needing
     # to duplicate the liveness computation.
     _persist_flags_to_cache(df, CACHE_DB)
-    interactive_loop(df)
+    # --no-repl / --pipeline-only skips the REPL for orchestrated runs
+    # (scripts/run_daily.py). Scoring / gate logic untouched — this is a
+    # single guard around the terminal-only input loop.
+    no_repl = (
+        '--no-repl' in sys.argv
+        or '--pipeline-only' in sys.argv
+        or os.environ.get('SCREENER_NO_REPL', '').strip().lower() in ('1', 'true', 'yes')
+    )
+    if not no_repl:
+        interactive_loop(df)
     print('  Done.')
 
 if __name__ == '__main__':
