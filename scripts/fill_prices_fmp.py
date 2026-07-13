@@ -73,6 +73,16 @@ TIMEOUT = 30
 MAX_RETRIES = 4
 DEFAULT_STALE_DAYS = 3  # tickers with last_px older than table_max - STALE_DAYS get refilled
 
+# FMP /stable/quote returns each ticker's LAST-KNOWN trade timestamp — not
+# today's if the ticker has stopped trading. Zombie tickers still listed in
+# active_symbols return timestamps from months or years ago. If we wrote
+# those verbatim they'd (a) pollute prices_live with fake-recent rows on
+# fetched_at, (b) NOT count fresh in the screener's 10-day gate anyway, and
+# (c) turn oracle-DELISTED-heuristic candidates into "has a row → maybe
+# alive" false positives. Reject any FMP quote whose trade date is older
+# than today - FRESH_DAYS. The ticker stays UNPRICED, which is honest.
+FRESH_DAYS = 5
+
 
 def load_api_key() -> str | None:
     key = os.environ.get("FMP_API_KEY")
@@ -287,13 +297,25 @@ def main() -> int:
     limiter = RateLimiter(args.rate_per_min)
     filled: list[tuple[str, str, float, int]] = []  # (ticker, date, price, ts)
     failed: list[str] = []
+    stale_quote: list[tuple[str, str]] = []  # (ticker, quote_date) — zombies
     lock = threading.Lock()
+    fresh_cutoff = _dt.date.today() - _dt.timedelta(days=FRESH_DAYS)
 
     def _one(t: str):
         q = fmp_quote(t, key, limiter)
         if q is None:
             with lock:
                 failed.append(t)
+            return
+        try:
+            q_date = _dt.date.fromisoformat(q["date"])
+        except (KeyError, ValueError):
+            with lock:
+                failed.append(t)
+            return
+        if q_date < fresh_cutoff:
+            with lock:
+                stale_quote.append((t, q["date"]))
             return
         with lock:
             filled.append((t, q["date"], q["price"], q["timestamp"]))
@@ -330,19 +352,29 @@ def main() -> int:
         FAIL_LOG.parent.mkdir(parents=True, exist_ok=True)
         FAIL_LOG.write_text("\n".join(failed))
         print(f"  {len(failed)} FMP-quote failures logged to {FAIL_LOG}")
+    if stale_quote:
+        stale_log = FAIL_LOG.parent / "fill_prices_stale.log"
+        stale_log.write_text("\n".join(f"{t}\t{d}" for t, d in stale_quote))
+        print(f"  {len(stale_quote)} stale-quote skips (quote date older than "
+              f"{FRESH_DAYS} days) logged to {stale_log}")
 
-    _emit(cov_before, cov_after, len(filled), len(failed), n_delisted_skipped, len(to_fill))
+    _emit(
+        cov_before, cov_after, len(filled), len(failed),
+        n_delisted_skipped, len(to_fill), stale_quote=len(stale_quote),
+    )
     print(f"  Coverage after fill: {cov_after:.1f}%  "
-          f"(filled_fmp={len(filled)}, failed={len(failed)})")
+          f"(filled_fmp={len(filled)}, failed={len(failed)}, "
+          f"stale_quote={len(stale_quote)})")
     return 0
 
 
 def _emit(cov_before: float, cov_after: float, filled: int, failed: int,
-          delisted_skipped: int, attempted: int) -> None:
+          delisted_skipped: int, attempted: int, stale_quote: int = 0) -> None:
     payload = {
         "attempted": attempted,
         "filled_fmp": filled,
         "failed": failed,
+        "stale_quote": stale_quote,
         "skipped_delisted": delisted_skipped,
         "coverage_before_pct": round(cov_before, 1),
         "coverage_after_pct": round(cov_after, 1),

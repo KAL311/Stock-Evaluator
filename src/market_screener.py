@@ -4600,19 +4600,19 @@ def main():
             n_unpriced = _cnt('UNPRICED')
             n_unknown = _cnt('UNKNOWN')
             n_live = n_universe - n_del - n_unpriced - n_unknown
-            # Coverage: distinct tickers with prices_live in the last 10 days.
+            # Coverage: fresh-priced tickers as fraction of the TRADEABLE
+            # universe (excluding oracle-DELISTED zombies). Reason: yfinance
+            # gaps are dominantly delisted/halted tickers whose FMP quote
+            # returns years-old timestamps; counting them against the
+            # denominator masks how well the pipeline is covering the
+            # actually-tradeable set. Formula:
+            #   coverage = live / (universe - delisted)
+            # Live-by-definition means the ticker has a fresh (within 10
+            # calendar days of table_max) prices_live row.
             _cov = None
-            try:
-                _cx = sqlite3.connect(str(CACHE_DB))
-                _cov_row = _cx.execute(
-                    "SELECT COUNT(DISTINCT ticker) FROM prices_live "
-                    "WHERE date >= date('now','-10 days')"
-                ).fetchone()
-                _cx.close()
-                if _cov_row and n_universe:
-                    _cov = _cov_row[0] / n_universe * 100
-            except Exception:
-                pass
+            _n_tradeable = n_universe - n_del
+            if _n_tradeable > 0:
+                _cov = n_live / _n_tradeable * 100
             # Non-USD + mixed-source come from fmp_mapping module attribute
             _non_usd = 0
             _mixed = 0
