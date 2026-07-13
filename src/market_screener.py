@@ -1432,7 +1432,8 @@ def compute_betas(sp, sp_meta):
 
 def compute_snapshot(companies, industries, income, balance, cashflow, sp_meta, betas, vols, t10y,
                      hi52w=None, lo52w=None, hist=None, ttm=None, momo=None, finviz=None,
-                     liquidity=None, reference_date=None, rev_yoy_q=None):
+                     liquidity=None, reference_date=None, rev_yoy_q=None,
+                     dq_guard=False):
     hi52w = hi52w or {}
     lo52w = lo52w or {}
     hist = hist or {}
@@ -1442,6 +1443,18 @@ def compute_snapshot(companies, industries, income, balance, cashflow, sp_meta, 
     rev_yoy_q = rev_yoy_q or {}
     ref_dt = reference_date if reference_date is not None else datetime.now()
     _unmapped_industries = {}
+    # Data-quality guard on derived valuation ratios. Off by default so
+    # backtest / AB-verify / parity harnesses stay bit-identical. Live path
+    # (main() below) opts in with dq_guard=True. Catches upstream input-scale
+    # bugs (e.g. SimFin Shares(Diluted)=89 for HESM 2024 producing div_yield
+    # ~6.8M%, or SimFin NI 1000x-overstated on SAND producing P/E=0.04) by
+    # NULLing implausible derived metrics rather than ranking on garbage.
+    # NULL (not fabricate) so the valuation subscore degrades gracefully via
+    # the coverage-min gate.
+    _DQ_GUARD_ENABLED = bool(dq_guard)
+    _DQ_PE_MIN, _DQ_PE_MAX = -1000.0, 1000.0
+    _DQ_DY_MIN, _DQ_DY_MAX = 0.0, 0.5
+    _DQ_LOG: list[dict] = []
     print('  Building stock snapshot...')
     companies = companies.reset_index()
     companies['Industry'] = companies['IndustryId'].map(industries['Industry'])
@@ -1523,6 +1536,28 @@ def compute_snapshot(companies, industries, income, balance, cashflow, sp_meta, 
         cur_r = (cur_assets / cur_liab) if cur_liab > 0 else None
         div_yield = (annual_div_ps / prev_close) if (prev_close > 0 and annual_div_ps > 0) else None
         payout_r = (abs(div_paid) / net_inc) if (net_inc > 0 and div_paid and div_paid != 0) else None
+
+        # DQ guard: NULL derived pe/dividend_yield outside plausible bounds.
+        # FMP-path only; SF-standalone remains bit-identical.
+        if _DQ_GUARD_ENABLED:
+            if p_e is not None and not (_DQ_PE_MIN <= p_e <= _DQ_PE_MAX):
+                _DQ_LOG.append({
+                    'ticker': ticker, 'field': 'pe', 'value': p_e,
+                    'mkt_cap': mkt_cap, 'net_income': net_inc,
+                    'shares_inc': shares_inc, 'div_paid': div_paid,
+                    'reason': 'pe out of [-1000,1000]',
+                })
+                p_e = None
+            if div_yield is not None and not (_DQ_DY_MIN <= div_yield <= _DQ_DY_MAX):
+                _DQ_LOG.append({
+                    'ticker': ticker, 'field': 'dividend_yield', 'value': div_yield,
+                    'mkt_cap': mkt_cap, 'net_income': net_inc,
+                    'shares_inc': shares_inc, 'div_paid': div_paid,
+                    'reason': 'dividend_yield out of [0,0.5]',
+                })
+                div_yield = None
+                annual_div_ps = 0
+                payout_r = None
 
         beta = betas.get(ticker, None)
         h = hist.get(ticker, {})
@@ -1623,6 +1658,16 @@ def compute_snapshot(companies, industries, income, balance, cashflow, sp_meta, 
         row['ps_ttm'] = round(mkt_cap / rev_ttm, 2) if (rev_ttm and rev_ttm > 0) else None
         row['pfcf_ttm'] = round(mkt_cap / fcf_ttm, 2) if (fcf_ttm and fcf_ttm > 0) else None
         row['ev_ebitda_ttm'] = round(ev / ebitda_ttm, 2) if (ebitda_ttm and ebitda_ttm > 0) else None
+        # DQ guard: NULL pe_ttm outside plausible bounds (near-zero TTM NI
+        # from partial-year filings or SF quarterly stale data blows this up).
+        if _DQ_GUARD_ENABLED and row['pe_ttm'] is not None and not (_DQ_PE_MIN <= row['pe_ttm'] <= _DQ_PE_MAX):
+            _DQ_LOG.append({
+                'ticker': ticker, 'field': 'pe_ttm', 'value': row['pe_ttm'],
+                'mkt_cap': mkt_cap, 'net_income': ni_ttm,
+                'shares_inc': shares_inc, 'div_paid': None,
+                'reason': 'pe_ttm out of [-1000,1000]',
+            })
+            row['pe_ttm'] = None
         # Phase 1.2 (revisited): YoY-quarterly revenue growth from quarterly
         # filings (requires only 5 quarters vs 3+ annuals — fills early-period
         # growth signal gap when annual-derived growth metrics are NaN).
@@ -1671,6 +1716,19 @@ def compute_snapshot(companies, industries, income, balance, cashflow, sp_meta, 
                                  key=lambda x: x[1], reverse=True)
         for industry, count in sorted_unmapped:
             print(f'    {count:>4d}  {industry}')
+    # Flush DQ guard log so scale regressions are caught loudly rather than
+    # silently surfacing as top-ranked garbage.
+    if _DQ_GUARD_ENABLED and _DQ_LOG:
+        try:
+            _dq_dir = Path('data/audit')
+            _dq_dir.mkdir(parents=True, exist_ok=True)
+            _dq_path = _dq_dir / f'data_quality_{ref_dt.strftime("%Y%m%d")}.csv'
+            pd.DataFrame(_DQ_LOG).to_csv(_dq_path, index=False)
+            by_field = pd.Series([r['field'] for r in _DQ_LOG]).value_counts().to_dict()
+            print(f'  DQ GUARD: NULLed {len(_DQ_LOG)} implausible derived metrics '
+                  f'({by_field}); offenders logged to {_dq_path}')
+        except Exception as e:
+            print(f'  DQ GUARD: failed to write log ({e}); {len(_DQ_LOG)} offenders NULLed in memory')
     return df_out
 
 def _rank_within(values, sector_group, force_zero=None):
@@ -4551,10 +4609,17 @@ def main():
             print('  Finviz disabled (DISABLE_FINVIZ=1)')
             finviz = {}
         print()
+        # DQ guard on live path only when FMP fundamentals are in play.
+        # USE_FMP_FUNDAMENTALS=0 (SF-only rollback) → guard OFF → bit-identical
+        # to pre-DQ-guard behavior. Every other value (default unset, '1',
+        # 'on', 'true', etc.) enables the guard.
+        _dq_env = os.environ.get('USE_FMP_FUNDAMENTALS', '').strip().lower()
+        _dq_live = _dq_env not in ('0', 'off', 'false')
         df = compute_snapshot(companies, industries, income, balance, cashflow,
                               sp_meta, betas, vols, t10y, hi52w, lo52w,
                               hist=hist, ttm=ttm, momo=momo, finviz=finviz,
-                              liquidity=liq, rev_yoy_q=rev_yoy_q)
+                              liquidity=liq, rev_yoy_q=rev_yoy_q,
+                              dq_guard=_dq_live)
         if len(df) > 0:
             df = compute_potential_scores(df)
             df = df.sort_values('potential_score', ascending=False, na_position='last')
