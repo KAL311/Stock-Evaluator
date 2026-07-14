@@ -514,20 +514,20 @@ def load_annual_with_fallback(
     merged_c = _blend(simfin_cashflow, fmp_c, CASHFLOW_COLS)
 
     # ---- Input-scale DQ guard on the merged frames (FMP path only) ----
-    # NULL implausible Shares(Diluted) and Net Income(Common) rather than
-    # letting them propagate to compute_snapshot as garbage derived ratios.
-    # Motivating cases observed 2026-07-13:
-    #   - HESM SF FY2024 Shares(Diluted)=89 (should be ~46M) -> dividend_yield
-    #     ~6.8M% because abs(div_paid)/shares_inc = 235M/89 = $2.64M/share.
-    #   - SAND SF FY2022 Net Income(Common)=$78B, Revenue=$148B (real ~$50M,
-    #     ~$100M) -> a 1000x-overstated NI, blows P/E.
-    # Rules:
-    #   * Shares(Diluted) < 100,000 raw count is implausible for any USD-listed
-    #     ticker (real-world small-cap floor ~1M shares). NULL if smaller.
-    #   * |Net Income (Common)| > 10 * |Revenue| with Revenue > 0 is
-    #     physically impossible (margin > 1000%). NULL both.
+    # NULL implausibly small Shares(Diluted) so downstream per-share metrics
+    # (dividend_yield primarily) fall out rather than blow up. Motivating
+    # case: HESM SF FY2024 Shares(Diluted)=89 (should be ~46M) produces
+    # dividend_yield ~6.8M% because abs(div_paid)/shares_inc = 235M/89 =
+    # $2.64M/share. Threshold 100K raw = below any USD-listed float.
+    #
+    # A prior version also NULLed Net Income (Common) when |NI|>10*|Rev|,
+    # but that fired on ~873 legit early-stage biotechs and pre-revenue
+    # tech names whose losses genuinely dwarf revenue — false positives.
+    # SAND's actual scale bug (NI $78B on Rev $148B) has NI/Rev = 0.5 and
+    # wouldn't be caught by that rule anyway; the derived-metric guard in
+    # compute_snapshot (dividend_yield out of [0,0.5]) picks it up. Kept
+    # the shares guard, dropped the NI guard.
     stats.setdefault('dq_shares_nulled', 0)
-    stats.setdefault('dq_ni_nulled', 0)
     dq_offenders: list[dict] = []
     if 'Shares (Diluted)' in merged_i.columns:
         bad_sh = merged_i['Shares (Diluted)'].notna() & (
@@ -540,21 +540,8 @@ def load_annual_with_fallback(
                     'value': float(row['Shares (Diluted)']),
                     'reason': 'shares < 100K (implausible for listed ticker)',
                 })
-            merged_i.loc[bad_sh, 'Shares (Diluted)'] = pd.NA
+            merged_i.loc[bad_sh, 'Shares (Diluted)'] = np.nan
             stats['dq_shares_nulled'] = int(bad_sh.sum())
-    if {'Net Income (Common)', 'Revenue'}.issubset(merged_i.columns):
-        rev_abs = merged_i['Revenue'].abs()
-        ni_abs = merged_i['Net Income (Common)'].abs()
-        bad_ni = (rev_abs > 0) & (ni_abs > 10 * rev_abs)
-        if bad_ni.any():
-            for (tk, rd), row in merged_i[bad_ni].iterrows():
-                dq_offenders.append({
-                    'ticker': tk, 'report_date': rd, 'field': 'Net Income (Common)',
-                    'value': float(row['Net Income (Common)']),
-                    'reason': f"|NI|={ni_abs.loc[(tk, rd)]:.3g} > 10 * |Rev|={rev_abs.loc[(tk, rd)]:.3g}",
-                })
-            merged_i.loc[bad_ni, 'Net Income (Common)'] = pd.NA
-            stats['dq_ni_nulled'] = int(bad_ni.sum())
     if dq_offenders and verbose:
         try:
             _dq_dir = REPO_ROOT / 'data' / 'audit'
@@ -563,8 +550,7 @@ def load_annual_with_fallback(
             pd.DataFrame(dq_offenders).to_csv(_dq_path, index=False)
             print(
                 f"    input DQ guard: NULLed {stats['dq_shares_nulled']} implausible "
-                f"Shares(Diluted) rows and {stats['dq_ni_nulled']} implausible "
-                f"Net Income rows; log -> {_dq_path}"
+                f"Shares(Diluted) rows; log -> {_dq_path}"
             )
         except Exception as e:
             print(

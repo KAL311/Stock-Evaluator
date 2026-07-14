@@ -1537,8 +1537,9 @@ def compute_snapshot(companies, industries, income, balance, cashflow, sp_meta, 
         div_yield = (annual_div_ps / prev_close) if (prev_close > 0 and annual_div_ps > 0) else None
         payout_r = (abs(div_paid) / net_inc) if (net_inc > 0 and div_paid and div_paid != 0) else None
 
-        # DQ guard: NULL derived pe/dividend_yield outside plausible bounds.
-        # FMP-path only; SF-standalone remains bit-identical.
+        # DQ guard (part 1): NULL derived pe/dividend_yield outside plausible
+        # bounds. FMP-path only; SF-standalone remains bit-identical.
+        _share_xcheck_failed = False
         if _DQ_GUARD_ENABLED:
             if p_e is not None and not (_DQ_PE_MIN <= p_e <= _DQ_PE_MAX):
                 _DQ_LOG.append({
@@ -1558,6 +1559,42 @@ def compute_snapshot(companies, industries, income, balance, cashflow, sp_meta, 
                 div_yield = None
                 annual_div_ps = 0
                 payout_r = None
+
+            # DQ guard (part 2): share-count cross-check. mkt_cap uses
+            # sp_Shares_Outstanding (from prices file); shares_inc uses
+            # Shares(Diluted) (from income file). When they disagree >50%,
+            # at least one source is corrupted — NULL every share/mkt_cap
+            # derived valuation ratio so ranking degrades rather than
+            # runs on bad shares. Catches the class of ~10x-wrong share
+            # counts that the <100K gross guard misses (e.g. MKC:
+            # sp_Shares=15.3M vs SF diluted=269M -> pe=1.40 looked
+            # plausible but mkt_cap was 17x too low; NTNX: SF diluted=245K
+            # vs implied 268M -> ok mkt_cap, but silent for div paths).
+            if shares_inc > 0 and prev_close > 0:
+                implied_shares = mkt_cap / prev_close if mkt_cap > 0 else 0
+                if implied_shares > 0:
+                    _share_dev = abs(implied_shares / shares_inc - 1.0)
+                    if _share_dev > 0.5:
+                        _DQ_LOG.append({
+                            'ticker': ticker, 'field': 'shares_xcheck',
+                            'value': _share_dev,
+                            'mkt_cap': mkt_cap, 'net_income': net_inc,
+                            'shares_inc': shares_inc, 'div_paid': div_paid,
+                            'reason': (
+                                f'implied={implied_shares:.3g} vs sf_diluted='
+                                f'{shares_inc:.3g} dev={_share_dev:.2f}'
+                            ),
+                        })
+                        _share_xcheck_failed = True
+                        # NULL every share- or mkt_cap-derived valuation ratio.
+                        p_e = None
+                        p_b = None
+                        p_s = None
+                        p_fcf = None
+                        ev_ebitda_val = None
+                        div_yield = None
+                        annual_div_ps = 0
+                        payout_r = None
 
         beta = betas.get(ticker, None)
         h = hist.get(ticker, {})
@@ -1658,16 +1695,28 @@ def compute_snapshot(companies, industries, income, balance, cashflow, sp_meta, 
         row['ps_ttm'] = round(mkt_cap / rev_ttm, 2) if (rev_ttm and rev_ttm > 0) else None
         row['pfcf_ttm'] = round(mkt_cap / fcf_ttm, 2) if (fcf_ttm and fcf_ttm > 0) else None
         row['ev_ebitda_ttm'] = round(ev / ebitda_ttm, 2) if (ebitda_ttm and ebitda_ttm > 0) else None
-        # DQ guard: NULL pe_ttm outside plausible bounds (near-zero TTM NI
-        # from partial-year filings or SF quarterly stale data blows this up).
-        if _DQ_GUARD_ENABLED and row['pe_ttm'] is not None and not (_DQ_PE_MIN <= row['pe_ttm'] <= _DQ_PE_MAX):
-            _DQ_LOG.append({
-                'ticker': ticker, 'field': 'pe_ttm', 'value': row['pe_ttm'],
-                'mkt_cap': mkt_cap, 'net_income': ni_ttm,
-                'shares_inc': shares_inc, 'div_paid': None,
-                'reason': 'pe_ttm out of [-1000,1000]',
-            })
-            row['pe_ttm'] = None
+        # DQ guard: NULL pe_ttm / ps_ttm / pfcf_ttm / ev_ebitda_ttm outside
+        # bounds or when the share cross-check failed above (mkt_cap is
+        # suspect either way).
+        if _DQ_GUARD_ENABLED:
+            if row['pe_ttm'] is not None and (
+                _share_xcheck_failed
+                or not (_DQ_PE_MIN <= row['pe_ttm'] <= _DQ_PE_MAX)
+            ):
+                _DQ_LOG.append({
+                    'ticker': ticker, 'field': 'pe_ttm', 'value': row['pe_ttm'],
+                    'mkt_cap': mkt_cap, 'net_income': ni_ttm,
+                    'shares_inc': shares_inc, 'div_paid': None,
+                    'reason': ('share_xcheck_failed'
+                               if _share_xcheck_failed
+                               else 'pe_ttm out of [-1000,1000]'),
+                })
+                row['pe_ttm'] = None
+            if _share_xcheck_failed:
+                # mkt_cap-derived TTM ratios all suspect
+                row['ps_ttm'] = None
+                row['pfcf_ttm'] = None
+                row['ev_ebitda_ttm'] = None
         # Phase 1.2 (revisited): YoY-quarterly revenue growth from quarterly
         # filings (requires only 5 quarters vs 3+ annuals — fills early-period
         # growth signal gap when annual-derived growth metrics are NaN).
