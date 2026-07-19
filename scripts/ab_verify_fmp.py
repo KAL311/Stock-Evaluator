@@ -80,7 +80,7 @@ def main():
     except Exception as e:
         print(f"    fetch_t10y failed ({e}); using None → scoring path handles missing.")
         t10y = None
-    finviz: dict = {}
+    ownership: dict = {}
 
     # ---- Run A: baseline SimFin ----
     print("\n  === Run A (SimFin baseline) — history + snapshot + score ===")
@@ -90,7 +90,7 @@ def main():
     df_a = ms.compute_snapshot(
         companies, industries, income, balance, cashflow,
         sp_meta, betas, vols, t10y, hi52w, lo52w,
-        hist=hist_a, ttm=ttm, momo=momo, finviz=finviz,
+        hist=hist_a, ttm=ttm, momo=momo, ownership=ownership,
         liquidity=liq, rev_yoy_q=rev_yoy_q,
     )
     print(f"    df_a: {len(df_a)} rows")
@@ -108,7 +108,7 @@ def main():
     df_b = ms.compute_snapshot(
         companies, industries, inc_b, bal_b, cf_b,
         sp_meta, betas, vols, t10y, hi52w, lo52w,
-        hist=hist_b, ttm=ttm, momo=momo, finviz=finviz,
+        hist=hist_b, ttm=ttm, momo=momo, ownership=ownership,
         liquidity=liq, rev_yoy_q=rev_yoy_q,
     )
     print(f"    df_b: {len(df_b)} rows")

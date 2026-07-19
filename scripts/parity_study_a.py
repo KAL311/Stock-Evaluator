@@ -207,9 +207,9 @@ def main():
     except Exception as e:
         print(f"    fetch_t10y failed ({e}); using default None → scoring path handles missing.")
         t10y = None
-    # Ownership: skip finviz (slow, external). Both runs share empty ownership;
-    # this holds identical between runs so parity is unaffected.
-    finviz: dict = {}
+    # Ownership: both runs share empty ownership (opt-in USE_FMP_OWNERSHIP
+    # is orthogonal to this parity study), so parity is unaffected.
+    ownership: dict = {}
 
     # --- SimFin path: FULL universe (required for sub-industry rank groups ≥30) ---
     print("\n  === SimFin history metrics (FULL universe) + snapshot ===")
@@ -219,7 +219,7 @@ def main():
     df_sf = ms.compute_snapshot(
         companies, industries, income, balance, cashflow,
         sp_meta, betas, vols, t10y, hi52w, lo52w,
-        hist=hist_sf_all, ttm=ttm, momo=momo, finviz=finviz,
+        hist=hist_sf_all, ttm=ttm, momo=momo, ownership=ownership,
         liquidity=liq, rev_yoy_q=rev_yoy_q,
     )
     print(f"    df_sf: {len(df_sf)} rows")
@@ -254,7 +254,7 @@ def main():
     df_fmp = ms.compute_snapshot(
         companies, industries, income, balance, cashflow,
         sp_meta, betas, vols, t10y, hi52w, lo52w,
-        hist=hist_fmp_merged, ttm=ttm, momo=momo, finviz=finviz,
+        hist=hist_fmp_merged, ttm=ttm, momo=momo, ownership=ownership,
         liquidity=liq, rev_yoy_q=rev_yoy_q,
     )
     print(f"    df_fmp: {len(df_fmp)} rows")

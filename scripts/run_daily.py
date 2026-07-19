@@ -471,6 +471,8 @@ def main() -> int:
     coverage = hj.get("coverage_pct")
     non_usd = hj.get("non_usd_fallback", "-")
     mixed = hj.get("mixed_source", "-")
+    dq_der = hj.get("dq_nulled_derived")
+    dq_shr = hj.get("dq_nulled_shares")
 
     # WARN conditions — coverage bands (loud/marginal/watch)
     if coverage is not None:
@@ -492,6 +494,14 @@ def main() -> int:
     price_ok_pct = price_stats.get("ok_pct")
     if price_ok_pct is not None and price_ok_pct < 85:
         warns.append(f"PRICE_FETCH_DEGRADED={price_ok_pct:.1f}%")
+    # DQ regression watch: source data corruption doubles the current baseline
+    # (~153 derived NULLs on 2026-07-13). Threshold picked at ~2x that (300)
+    # so a normal-run drift stays quiet but a real regression pages loudly.
+    # Shares DQ is a separate upstream guard in src/fmp_mapping.py; surface
+    # it too but do NOT threshold — the shares guard is meant to run every
+    # rebuild and its count reflects listing-file churn rather than data health.
+    if isinstance(dq_der, int) and dq_der > 300:
+        warns.append(f"DQ_DERIVED_SPIKE={dq_der}")
 
     status = "OK" if not any(
         w.startswith("STEP_FAILED") or w == "NO_HEALTH_JSON" for w in warns
@@ -503,6 +513,11 @@ def main() -> int:
     turn_str = str(turnover) if turnover >= 0 else "-"
     price_ok_str = f"{price_ok_pct:.1f}%" if price_ok_pct is not None else "-"
     fmp_fill = fill_stats.get("filled_fmp", "-")
+    dq_str = (
+        f"{dq_der}/{dq_shr}"
+        if (isinstance(dq_der, int) and isinstance(dq_shr, int))
+        else "-"
+    )
     health_line = (
         f"{ts} | STATUS={status}"
         f" | source={source}"
@@ -513,6 +528,7 @@ def main() -> int:
         f" | fmp_price_fill={fmp_fill}"
         f" | non_usd_fallback={non_usd}"
         f" | mixed_source={mixed}"
+        f" | dq_nulled={dq_str}"
         f" | top10_turnover_vs_prev={turn_str}"
         f" | duration={duration:.0f}s{warn_str}"
     )

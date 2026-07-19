@@ -3,12 +3,15 @@
 across four sub-scores (Valuation, Quality, Growth, Sentiment), tags mispricing
 patterns via flags, exposes interactive query REPL with why/compare commands.
 
-Degradation design: if Finviz is unavailable (DISABLE_FINVIZ=1, or health check
-fails), the screener continues gracefully. What is lost:
-- Insider ownership, short interest, institutional ownership tracking
-- sentiment_score still works but relies solely on price-based signals
-  (distance_from_52w_high, return_12m_minus_1m), which carry 70% of total
-  sentiment weight — above the 50% min_coverage threshold."""
+Sentiment design: sentiment_score relies SOLELY on price-based signals
+(distance_from_52w_high, return_12m_minus_1m). The SENTIMENT_WEIGHTS dict
+retains entries for insider_own and short_float so that the opt-in
+USE_FMP_OWNERSHIP=1 adapter (see scripts/refresh_ownership_fmp.py + the
+ownership_live table) can populate them; when that adapter is off (default),
+those fields are NaN universe-wide and _weighted_avg renormalizes to the
+price pair. The Finviz scraper that formerly populated ownership fields has
+been removed — validated 2025 OOS ran with an empty ownership map, so the
+frozen scoring model is unchanged."""
 
 import simfin as sf
 from simfin.names import *
@@ -18,7 +21,6 @@ import sqlite3, os, sys, re, csv, json, ssl
 from datetime import datetime, timedelta, date
 from urllib.request import urlopen
 from pathlib import Path
-from concurrent.futures import ThreadPoolExecutor, as_completed
 import itertools
 
 import warnings
@@ -92,9 +94,6 @@ CORP_TAX_RATE = 0.21
 # Bump this whenever the schema or persisted column set changes. load_cache
 # treats any mismatch as stale and forces a rebuild.
 CACHE_SCHEMA_VERSION = 13  # v13: add revenue_growth_yoy_q as 5th growth component
-# Finviz scrape adds ~2-5 min on cold cache (per-ticker HTTP). Cached 24h per ticker.
-# Disable with env var DISABLE_FINVIZ=1 if you only need SimFin-derived metrics.
-ENABLE_FINVIZ = os.environ.get('DISABLE_FINVIZ', '').lower() not in ('1', 'true', 'yes')
 
 # ============================================================================
 # Phase 3: Potential score weights and configuration.
@@ -478,13 +477,19 @@ GROWTH_WEIGHTS = {
 }
 assert abs(sum(GROWTH_WEIGHTS.values()) - 1.0) < 1e-6, 'GROWTH_WEIGHTS must sum to 1'
 
-# Sentiment component weights. Short interest weighted lightly — heavy shorting
-# is ambiguous (mispricing vs. shorts are right). Insider ownership: skin in the game.
+# Sentiment component weights. Price signals (distance_from_52w_high +
+# return_12m_minus_1m, 0.70 combined) are the DEFAULT sole path — insider_own
+# and short_float are NaN universe-wide unless the opt-in USE_FMP_OWNERSHIP=1
+# adapter populates them, in which case _weighted_avg picks them up
+# automatically. When ownership is NaN, _weighted_avg renormalizes to the
+# price pair (weight_sum=0.70, coverage=0.70 > 0.50 min → sentiment scored);
+# the resulting score is (s_dist + s_momo)/2 regardless of whether the
+# ownership entries are present in the dict (kept for optional-in path).
 SENTIMENT_WEIGHTS = {
     'distance_from_52w_high': 0.35,  # deep drawdown = potential bargain
     'return_12m_minus_1m': 0.35,     # contrarian (or momentum) signal
-    'short_float': 0.10,             # light weight, inverted
-    'insider_own': 0.20,             # high inside ownership = skin in the game
+    'short_float': 0.10,             # opt-in via USE_FMP_OWNERSHIP; NaN otherwise
+    'insider_own': 0.20,             # opt-in via USE_FMP_OWNERSHIP; NaN otherwise
 }
 assert abs(sum(SENTIMENT_WEIGHTS.values()) - 1.0) < 1e-6, 'SENTIMENT_WEIGHTS must sum to 1'
 
@@ -782,13 +787,6 @@ CREATE TABLE IF NOT EXISTS stocks (
     liquidity_tier TEXT,
     last_updated TEXT
 );
-CREATE TABLE IF NOT EXISTS finviz_cache (
-    ticker TEXT PRIMARY KEY,
-    insider_own REAL, inst_own REAL, short_float REAL,
-    price REAL,
-    fetched_at TEXT
-);
-CREATE INDEX IF NOT EXISTS idx_finviz_fetched_at ON finviz_cache(fetched_at);
 CREATE INDEX IF NOT EXISTS idx_stocks_sector_group ON stocks(sector_group);
 CREATE INDEX IF NOT EXISTS idx_stocks_potential ON stocks(potential_score DESC);
 '''
@@ -1214,24 +1212,10 @@ def compute_liquidity(sp):
     print(f'    Computed liquidity for {len(out)} tickers')
     return out
 
-def _parse_pct(s):
-    # Finviz returns strings like "5.23%" or "-" or "N/A".
-    if s is None:
-        return None
-    s = str(s).strip()
-    if s in ('-', '', 'N/A'):
-        return None
-    s = s.replace('%', '').replace(',', '')
-    try:
-        return float(s) / 100.0
-    except ValueError:
-        return None
-
 def load_ownership_live(tickers):
     """Read latest ownership_live row per ticker (filing_date <= today).
-    Returns dict[ticker] -> {insider_own, inst_own, short_float}, same shape
-    as fetch_finviz() output minus 'price'. Values already normalized to
-    [0,1] fractions by refresh_ownership_fmp.py.
+    Returns dict[ticker] -> {insider_own, inst_own, short_float}. Values
+    already normalized to [0,1] fractions by refresh_ownership_fmp.py.
 
     Silent no-op if the ownership_live table does not exist (script never run).
     Consumed only when USE_FMP_OWNERSHIP=1 env var is set; see docs/ownership_layer.md.
@@ -1264,98 +1248,6 @@ def load_ownership_live(tickers):
     finally:
         conn.close()
 
-
-def load_finviz_cache(tickers):
-    if not CACHE_DB.exists():
-        return {}
-    conn = sqlite3.connect(str(CACHE_DB))
-    conn.executescript(CACHE_SCHEMA)
-    cutoff = (datetime.now() - timedelta(hours=24)).isoformat()
-    placeholders = ','.join('?' * len(tickers))
-    cur = conn.execute(
-        f"SELECT ticker, insider_own, inst_own, short_float, price FROM finviz_cache "
-        f"WHERE fetched_at > ? AND ticker IN ({placeholders})",
-        (cutoff, *tickers)
-    )
-    out = {r[0]: {'insider_own': r[1], 'inst_own': r[2], 'short_float': r[3], 'price': r[4]} for r in cur.fetchall()}
-    conn.close()
-    return out
-
-def save_finviz_cache(rows):
-    if not rows:
-        return
-    conn = sqlite3.connect(str(CACHE_DB))
-    conn.executescript(CACHE_SCHEMA)
-    now = datetime.now().isoformat()
-    conn.executemany(
-        "INSERT OR REPLACE INTO finviz_cache (ticker, insider_own, inst_own, short_float, price, fetched_at) "
-        "VALUES (?, ?, ?, ?, ?, ?)",
-        [(t, r.get('insider_own'), r.get('inst_own'), r.get('short_float'), r.get('price'), now) for t, r in rows.items()]
-    )
-    conn.commit()
-    conn.close()
-
-def _fetch_one_finviz(ticker, retries=3):
-    # Retry with exponential backoff. Finviz rate-limits aggressively; without
-    # this 80%+ of requests fail under any meaningful concurrency.
-    import time, random
-    for attempt in range(retries):
-        try:
-            from finvizfinance.quote import finvizfinance
-            f = finvizfinance(ticker)
-            raw = f.ticker_fundament()
-            if not raw:
-                return ticker, None
-            price_raw = raw.get('Price')
-            price_val = float(price_raw) if (price_raw and price_raw not in ('-', '', 'N/A')) else None
-            return ticker, {
-                'insider_own': _parse_pct(raw.get('Insider Own')),
-                'inst_own': _parse_pct(raw.get('Inst Own')),
-                'short_float': _parse_pct(raw.get('Short Float')),
-                'price': price_val,
-            }
-        except Exception:
-            if attempt < retries - 1:
-                time.sleep((1.5 ** attempt) + random.uniform(0, 0.5))
-    return ticker, None
-
-def fetch_finviz(tickers, max_workers=10):
-    # Finviz has no bulk endpoint; batch with threads. Limited to ~10 workers
-    # because higher concurrency triggers rate limiting and silent failures.
-    # First cold run on 2500+ tickers takes 10-20 min. Per-ticker 24h cache makes
-    # subsequent runs effectively free.
-    # Health check: probe a single ticker to detect Finviz outage before bulk.
-    probe = _fetch_one_finviz('AAPL', retries=3)
-    if probe[1] is None:
-        print('  WARNING: Finviz health check failed. Disabling Finviz data for this run.',
-              file=sys.stderr)
-        print('    insider_own/short_float will be NaN for all tickers.',
-              file=sys.stderr)
-        print('    sentiment_score will use only price-based signals.',
-              file=sys.stderr)
-        return {}
-    cached = load_finviz_cache(list(tickers))
-    missing = [t for t in tickers if t not in cached]
-    print(f'  Finviz: {len(cached)} cached, fetching {len(missing)} (this can take 10-20 min cold)...')
-    fetched = {}
-    if missing:
-        with ThreadPoolExecutor(max_workers=max_workers) as ex:
-            futures = [ex.submit(_fetch_one_finviz, t) for t in missing]
-            done = 0
-            for fut in as_completed(futures):
-                t, rec = fut.result()
-                done += 1
-                if rec is not None:
-                    fetched[t] = rec
-                if done % 250 == 0:
-                    print(f'    Finviz progress: {done}/{len(missing)} ({len(fetched)} ok)')
-                # Periodic checkpoint so a crash doesn't lose all progress.
-                if done % 500 == 0 and fetched:
-                    save_finviz_cache(fetched)
-        save_finviz_cache(fetched)
-    out = {**cached, **fetched}
-    print(f'    Finviz total: {len(out)}/{len(tickers)}')
-    return out
 
 def compute_52w(sp):
     # Per-ticker 52-week high/low from daily closes (price-only, ignoring splits via Adj. Close).
@@ -1431,7 +1323,7 @@ def compute_betas(sp, sp_meta):
     return betas, vols
 
 def compute_snapshot(companies, industries, income, balance, cashflow, sp_meta, betas, vols, t10y,
-                     hi52w=None, lo52w=None, hist=None, ttm=None, momo=None, finviz=None,
+                     hi52w=None, lo52w=None, hist=None, ttm=None, momo=None, ownership=None,
                      liquidity=None, reference_date=None, rev_yoy_q=None,
                      dq_guard=False):
     hi52w = hi52w or {}
@@ -1439,7 +1331,7 @@ def compute_snapshot(companies, industries, income, balance, cashflow, sp_meta, 
     hist = hist or {}
     ttm = ttm or {}
     momo = momo or {}
-    finviz = finviz or {}
+    ownership = ownership or {}
     rev_yoy_q = rev_yoy_q or {}
     ref_dt = reference_date if reference_date is not None else datetime.now()
     _unmapped_industries = {}
@@ -1734,14 +1626,14 @@ def compute_snapshot(companies, industries, income, balance, cashflow, sp_meta, 
         row['distance_from_52w_high'] = (
             round(prev_close / hi - 1.0, 4) if (hi and hi > 0 and prev_close > 0) else None
         )
-        # Finviz ownership/short data + live price.
-        fv = finviz.get(ticker, {})
+        # Ownership fields (insider_own, inst_own, short_float). Populated
+        # from the ownership_live table when USE_FMP_OWNERSHIP=1; otherwise
+        # the dict is empty and these stay NaN (sentiment renormalizes to
+        # the price pair via _weighted_avg — see module docstring).
+        fv = ownership.get(ticker, {})
         for k in ('insider_own', 'inst_own', 'short_float'):
             v = fv.get(k)
             row[k] = round(v, 4) if v is not None else None
-        finviz_price = fv.get('price')
-        if finviz_price is not None:
-            row['_price_live'] = round(finviz_price, 2)
         row['avg_dollar_volume_30d'] = round(dollar_vol, 0) if dollar_vol > 0 else None
         if dollar_vol > 50_000_000:
             row['liquidity_tier'] = 'large'
@@ -1778,7 +1670,17 @@ def compute_snapshot(companies, industries, income, balance, cashflow, sp_meta, 
                   f'({by_field}); offenders logged to {_dq_path}')
         except Exception as e:
             print(f'  DQ GUARD: failed to write log ({e}); {len(_DQ_LOG)} offenders NULLed in memory')
+    # Publish DQ derived count at module level so main() can fold it into
+    # HEALTH_JSON without changing the return signature (backtest/AB harnesses
+    # unpack df_out only).
+    global LAST_DQ_DERIVED_COUNT  # noqa: PLW0603
+    LAST_DQ_DERIVED_COUNT = len(_DQ_LOG) if _DQ_GUARD_ENABLED else 0
     return df_out
+
+
+# Populated by compute_snapshot on each call. Read by main()'s HEALTH_JSON
+# emitter. Zero when the DQ guard is off (SF-only rollback path).
+LAST_DQ_DERIVED_COUNT: int = 0
 
 def _rank_within(values, sector_group, force_zero=None):
     # Percentile-rank `values` within each sector. NaN → NaN (skipped in aggregation).
@@ -2008,9 +1910,10 @@ def compute_potential_scores(df, verbose=True):
     if n_dropped > 0 and verbose:
         print(f'    Dropped {n_dropped} stocks from sentiment_score (insufficient component coverage)')
     if verbose:
-        n_with_finviz = df['insider_own'].notna().sum()
-        pct = n_with_finviz / len(df) * 100
-        print(f'    Finviz coverage: {n_with_finviz}/{len(df)} ({pct:.0f}%)')
+        n_with_own = df['insider_own'].notna().sum()
+        pct = n_with_own / len(df) * 100
+        print(f'    Ownership coverage: {n_with_own}/{len(df)} ({pct:.0f}%)  '
+              f'(USE_FMP_OWNERSHIP path; 0% is expected default)')
 
     # ---- Combine into final POTENTIAL with sector-specific weights (§5.4). ----
     sub_df = pd.DataFrame({
@@ -3278,7 +3181,7 @@ def print_why(df, ticker):
     ins = r.get('insider_own')
     sf = r.get('short_float')
     if (ins is None or pd.isna(ins)) and (sf is None or pd.isna(sf)):
-        print('  (Finviz data unavailable for this ticker)')
+        print('  (Ownership data unavailable — enable USE_FMP_OWNERSHIP=1 to populate)')
     flags = r.get('flags')
     print(f'  Flags: {flags if (flags and not pd.isna(flags)) else "(none)"}')
     n_yrs = r.get('n_yrs_history', 0)
@@ -4630,33 +4533,18 @@ def main():
         rev_yoy_q = compute_quarterly_yoy_growth(income_q)
         del income_q, cashflow_q
         print()
-        # Finviz fallback for insider/inst ownership + short float. Threaded; 24h cache per ticker.
-        # Pre-filter to tickers above market-cap floor to avoid wasting fetches.
-        # USE_FMP_OWNERSHIP=1 swaps the Finviz path for the ownership_live table
-        # populated by scripts/refresh_ownership_fmp.py. Opt-in gate — see
-        # docs/ownership_layer.md for freeze rationale.
+        # Ownership fields (insider_own, inst_own, short_float) are opt-in via
+        # USE_FMP_OWNERSHIP=1, which reads scripts/refresh_ownership_fmp.py's
+        # ownership_live table. Default off → empty dict → sentiment renormalizes
+        # to the price pair (see module docstring + SENTIMENT_WEIGHTS comment).
         use_fmp_own = os.environ.get('USE_FMP_OWNERSHIP', '').lower() in ('1', 'true', 'yes')
         if use_fmp_own:
             caps_series = (sp_meta['sp_Close'] * sp_meta['sp_Shares Outstanding'])
             candidate_tickers = caps_series[caps_series >= MIN_MARKET_CAP].index.tolist()
-            finviz = load_ownership_live(candidate_tickers)
-            print(f'  FMP ownership_live: {len(finviz)}/{len(candidate_tickers)} tickers gained ownership data')
-        elif ENABLE_FINVIZ:
-            # FINVIZ_HEALTH_CHECK_ONLY: probe connectivity and exit.
-            if os.environ.get('FINVIZ_HEALTH_CHECK_ONLY', '').lower() in ('1', 'true', 'yes'):
-                probe = _fetch_one_finviz('AAPL', retries=3)
-                if probe[1] is not None:
-                    print(f'  Finviz health check OK: AAPL data = {probe[1]}')
-                else:
-                    print('  Finviz health check FAILED (AAPL returned no data).')
-                    print('  Check network/VPN; Finviz may be rate-limiting or blocking you.')
-                return
-            caps_series = (sp_meta['sp_Close'] * sp_meta['sp_Shares Outstanding'])
-            candidate_tickers = caps_series[caps_series >= MIN_MARKET_CAP].index.tolist()
-            finviz = fetch_finviz(candidate_tickers)
+            ownership = load_ownership_live(candidate_tickers)
+            print(f'  FMP ownership_live: {len(ownership)}/{len(candidate_tickers)} tickers gained ownership data')
         else:
-            print('  Finviz disabled (DISABLE_FINVIZ=1)')
-            finviz = {}
+            ownership = {}
         print()
         # DQ guard on live path only when FMP fundamentals are in play.
         # USE_FMP_FUNDAMENTALS=0 (SF-only rollback) → guard OFF → bit-identical
@@ -4666,18 +4554,12 @@ def main():
         _dq_live = _dq_env not in ('0', 'off', 'false')
         df = compute_snapshot(companies, industries, income, balance, cashflow,
                               sp_meta, betas, vols, t10y, hi52w, lo52w,
-                              hist=hist, ttm=ttm, momo=momo, finviz=finviz,
+                              hist=hist, ttm=ttm, momo=momo, ownership=ownership,
                               liquidity=liq, rev_yoy_q=rev_yoy_q,
                               dq_guard=_dq_live)
         if len(df) > 0:
             df = compute_potential_scores(df)
             df = df.sort_values('potential_score', ascending=False, na_position='last')
-            # Override price with live Finviz price (after scoring, so valuation ratios stay based on SimFin).
-            if '_price_live' in df.columns:
-                n = df['_price_live'].notna().sum()
-                if n > 0:
-                    df['price'] = df['_price_live']
-                df = df.drop(columns=['_price_live'])
             save_cache(df)
         else:
             print('  Error: no stocks could be processed.')
@@ -4727,15 +4609,22 @@ def main():
             _n_tradeable = n_universe - n_del
             if _n_tradeable > 0:
                 _cov = n_live / _n_tradeable * 100
-            # Non-USD + mixed-source come from fmp_mapping module attribute
+            # Non-USD + mixed-source + shares-DQ come from fmp_mapping.
             _non_usd = 0
             _mixed = 0
+            _dq_shares = 0
             try:
                 from src import fmp_mapping as _fm
                 _non_usd = int(_fm.LAST_LOAD_STATS.get('non_usd_count', 0) or 0)
                 _mixed = int(_fm.LAST_LOAD_STATS.get('mixed_source_tickers', 0) or 0)
+                _dq_shares = int(_fm.LAST_LOAD_STATS.get('dq_shares_nulled', 0) or 0)
             except Exception:
                 pass
+            # Derived-DQ count comes from compute_snapshot's module attr,
+            # populated in the cache-rebuild path. On cache-hit no snapshot ran
+            # this invocation → attr stays 0 (the CSV log from the prior run
+            # is still the source of truth for offender detail).
+            _dq_derived = int(LAST_DQ_DERIVED_COUNT)
             # Read env at emit time so this works for both cache-hit and
             # cache-rebuild paths (use_fmp_fund is scoped to the rebuild
             # branch above and may be undefined on cache-hit).
@@ -4751,6 +4640,8 @@ def main():
                 "coverage_pct": round(_cov, 1) if _cov is not None else None,
                 "non_usd_fallback": _non_usd,
                 "mixed_source": _mixed,
+                "dq_nulled_derived": _dq_derived,
+                "dq_nulled_shares": _dq_shares,
                 "regime": _regime,
                 "cache_updated_at": datetime.now().isoformat(timespec="seconds"),
             }

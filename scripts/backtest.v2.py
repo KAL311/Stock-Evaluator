@@ -403,11 +403,11 @@ def run_one_period(cutoff_str, forward_str, t10y, ism, curve_10y2y, core_cpi_yoy
         print(f'  WARNING: latest sp date {latest_sp_at_date.date()}, {gap}d before cutoff')
 
     print('\nBuilding v1 snapshot...')
-    print('  Finviz disabled (no look-ahead).')
+    print('  Ownership disabled (no look-ahead — sentiment is price-only).')
     df = ms.compute_snapshot(
         companies, industries, income_h, balance_h, cashflow_h,
         sp_meta_at, betas, vols, t10y, hi52w, lo52w,
-        hist=hist, ttm=ttm_p, momo=momo, finviz={},
+        hist=hist, ttm=ttm_p, momo=momo, ownership={},
         liquidity=liq, reference_date=cutoff, rev_yoy_q=rev_yoy_q,
     )
     print(f'  Snapshot: {len(df)} stocks')
@@ -437,11 +437,11 @@ def run_one_period(cutoff_str, forward_str, t10y, ism, curve_10y2y, core_cpi_yoy
     n_scored = df['potential_score'].notna().sum()
     print(f'  Scored: {n_scored}/{len(df)}')
 
-    # ----- Sentiment sanity (no Finviz leak) -----
+    # ----- Sentiment sanity (no ownership leak) -----
     n_short = df.get('short_float', pd.Series([0])).notna().sum()
     n_insider = df.get('insider_own', pd.Series([0])).notna().sum()
     if n_short > 1 or n_insider > 1:
-        sys.exit('ABORT: Finviz data leaked into backtest.')
+        sys.exit('ABORT: ownership data leaked into backtest.')
     n_dist = df.get('distance_from_52w_high', pd.Series([0])).notna().sum()
     n_momo = df.get('return_12m_minus_1m', pd.Series([0])).notna().sum()
     print(f'  Price-sentiment: dist52w={n_dist}, momo12-1={n_momo}')

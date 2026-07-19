@@ -26,7 +26,6 @@ sys.path.insert(0, str(ROOT / 'src'))
 # at calibration time but the module enforces it; set a placeholder.
 import os
 os.environ.setdefault('SIMFIN_API_KEY', 'CALIBRATION_PLACEHOLDER')
-os.environ.setdefault('DISABLE_FINVIZ', '1')
 os.environ.setdefault('DECAY_ENABLED', '0')  # avoid recursive load
 import market_screener as ms
 

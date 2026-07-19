@@ -13,27 +13,25 @@ Also prints sector balance check and full breakdown of well-known tickers from t
 CURRENT cache (not point-in-time).
 
 ============================================================================
-WARNING TO FUTURE-SELF: DO NOT PASS FINVIZ DATA INTO THE BACKTEST.
+WARNING TO FUTURE-SELF: DO NOT PASS OWNERSHIP DATA INTO THE BACKTEST.
 ============================================================================
-The Finviz fields (insider_own, inst_own, short_float) used by the SENTIMENT
-sub-score are scraped LIVE from finviz.com and reflect TODAY's ownership
-structure, not the as-of-cutoff values. Passing them into compute_snapshot for
-a historical backtest = look-ahead contamination: future ownership changes,
-short-squeezes, etc., leak into the period's score.
+The ownership fields (insider_own, inst_own, short_float) used by the
+SENTIMENT sub-score come from live third-party sources (currently the opt-in
+USE_FMP_OWNERSHIP adapter → ownership_live table) and reflect TODAY's
+ownership structure, not the as-of-cutoff values. Passing them into
+compute_snapshot for a historical backtest = look-ahead contamination:
+future ownership changes, short-squeezes, etc., leak into the period's score.
 
-Mitigation here: we explicitly pass `finviz={}` so compute_potential_scores
+Mitigation here: we explicitly pass `ownership={}` so compute_potential_scores
 sees only price-based sentiment components (distance_from_52w_high and
 return_12m_minus_1m), both of which are computed from sp data already filtered
 to <= the period's cutoff date.
 
 Downstream consequence: _weighted_avg in compute_potential_scores silently
 rescales the SENTIMENT_WEIGHTS over the 2 available components (raising their
-effective weight from 35%+35%=70% to 100%). That's intended for the backtest.
-DO NOT "fix" the missing data by passing today's Finviz dict — that
-reintroduces the look-ahead bias.
-
-(The production screener in market_screener.py *does* pass live Finviz data;
-that's fine for the live screen since "today" = "now" everywhere.)
+effective weight from 35%+35%=70% to 100%). That's intended for the backtest —
+and it's now the LIVE default too — USE_FMP_OWNERSHIP is off by default, so
+backtest and live paths both score sentiment on price only.
 ============================================================================
 """
 import argparse, os, sys, sqlite3, time
@@ -175,11 +173,11 @@ def run_one_period(cutoff_str, forward_str, t10y,
               f'{gap}d before cutoff {cutoff.date()}')
 
     print('\nBuilding snapshot + scoring...')
-    print('  Finviz disabled (historical sentiment unreliable).')
+    print('  Ownership disabled (historical values unavailable — sentiment is price-only).')
     df = ms.compute_snapshot(
         companies, industries, income_h, balance_h, cashflow_h,
         sp_meta_at, betas, vols, t10y, hi52w, lo52w,
-        hist=hist, ttm=ttm_p, momo=momo, finviz={},
+        hist=hist, ttm=ttm_p, momo=momo, ownership={},
         liquidity=liq, reference_date=cutoff,
     )
     df = ms.compute_potential_scores(df, verbose=False)
@@ -191,7 +189,7 @@ def run_one_period(cutoff_str, forward_str, t10y,
     n_short = df['short_float'].notna().sum()
     n_insider = df['insider_own'].notna().sum()
     if n_short > 0 or n_insider > 0:
-        sys.exit('ABORT: Finviz data leaked into backtest — sentiment_score is contaminated.')
+        sys.exit('ABORT: ownership data leaked into backtest — sentiment_score is contaminated.')
     # Confirm price-based sentiment components ARE populated (catches sp filtering bugs).
     n_dist = df['distance_from_52w_high'].notna().sum()
     n_momo = df['return_12m_minus_1m'].notna().sum()
