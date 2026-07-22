@@ -93,7 +93,7 @@ EQUITY_RISK_PREMIUM = 0.05
 CORP_TAX_RATE = 0.21
 # Bump this whenever the schema or persisted column set changes. load_cache
 # treats any mismatch as stale and forces a rebuild.
-CACHE_SCHEMA_VERSION = 13  # v13: add revenue_growth_yoy_q as 5th growth component
+CACHE_SCHEMA_VERSION = 14  # v14: add dq_share_xcheck_failed flag (drives scorer mkt/EV mask)
 
 # ============================================================================
 # Phase 3: Potential score weights and configuration.
@@ -785,6 +785,7 @@ CREATE TABLE IF NOT EXISTS stocks (
     last_filing_date TEXT,
     avg_dollar_volume_30d REAL,
     liquidity_tier TEXT,
+    dq_share_xcheck_failed INTEGER,
     last_updated TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_stocks_sector_group ON stocks(sector_group);
@@ -822,6 +823,7 @@ DATA_FIELDS = [
     'flags', 'n_yrs_history', 'stale_fundamentals', 'stale_last_pub_date',
     'last_filing_date', 'filing_age_days',
     'avg_dollar_volume_30d', 'liquidity_tier',
+    'dq_share_xcheck_failed',
 ]
 
 T10Y_URL = ('https://api.fiscaldata.treasury.gov/api/v1/accounting/od/'
@@ -1530,6 +1532,10 @@ def compute_snapshot(companies, industries, income, balance, cashflow, sp_meta, 
             'realized_vol': vols.get(ticker) if vols else None,
             'high_52w': round(hi52w[ticker], 2) if ticker in hi52w else None,
             'low_52w': round(lo52w[ticker], 2) if ticker in lo52w else None,
+            # DQ flag: shares cross-check failed -> mkt_cap/EV corrupt.
+            # Propagated to compute_potential_scores where cap-derived
+            # yields are masked. SF-only path never sets True (guard off).
+            'dq_share_xcheck_failed': int(_share_xcheck_failed),
         }
         rev_g_hist = h.get('revenue_growth_3yr')
         row['revenue_growth_3yr'] = round(rev_g_hist, 4) if rev_g_hist is not None else None
@@ -1793,6 +1799,22 @@ def compute_potential_scores(df, verbose=True):
             df[c] = pd.to_numeric(df[c], errors='coerce')
     sg = df['sector_group'].fillna('')
     mkt = df['market_cap'].astype(float)
+    ev = df['enterprise_value'].astype(float)
+    # DQ propagation: when the compute_snapshot share cross-check flagged
+    # market_cap as corrupt (~17x wrong shares -> mkt_cap and EV both off
+    # by the same factor), the display ratios (pe/pb/ps/pfcf/ev_ebitda +
+    # TTM) are already NULLed at row build. But the scorer below recomputes
+    # yields from raw mkt_cap / EV, so bad cap would silently pin
+    # earnings/fcf/sales/ebitda yields high (17x cheap). Mask mkt/EV to
+    # NaN for xcheck-failed rows so ey/fy/sy/eby become NaN too, and the
+    # existing weighted-avg coverage floor (min_coverage=0.5) drops
+    # valuation_score to NaN. book_yield already NaN via pb NULL upstream.
+    # Non-xcheck rows are bit-identical.
+    _xcheck_mask = pd.to_numeric(df.get('dq_share_xcheck_failed', 0),
+                                 errors='coerce').fillna(0).astype(bool)
+    if _xcheck_mask.any():
+        mkt = mkt.where(~_xcheck_mask)
+        ev = ev.where(~_xcheck_mask)
 
     # ---- VALUATION components (yield form — higher = cheaper = better). ----
     # earnings_yield = NI_ttm / market_cap. Force zero if NI<=0 (had data, just bad).
@@ -1811,7 +1833,6 @@ def compute_potential_scores(df, verbose=True):
     # ebitda_yield = ebitda_ttm / EV. Force zero on negative ebitda. EV negative is
     # extremely rare (net-cash company with no debt) — treat as "missing" not "bad."
     ebt = df['ebitda_ttm']
-    ev = df['enterprise_value'].astype(float)
     eby = (ebt / ev).where((ev > 0))
     eby_fz = ebt.notna() & (ebt <= 0) & (ev > 0)
     val_scores = pd.DataFrame({
@@ -3952,13 +3973,20 @@ def compute_potential_scores_v2(df, gics_map=None, verbose=True):
 
     sg = df['rank_key']
     mkt = df['market_cap'].astype(float)
+    ev = df['enterprise_value'].astype(float)
+    # DQ propagation (same as v1 path): xcheck-failed rows -> mask cap
+    # so cap-derived yields become NaN. See compute_potential_scores.
+    _xcheck_mask = pd.to_numeric(df.get('dq_share_xcheck_failed', 0),
+                                 errors='coerce').fillna(0).astype(bool)
+    if _xcheck_mask.any():
+        mkt = mkt.where(~_xcheck_mask)
+        ev = ev.where(~_xcheck_mask)
 
     # ---- VALUATION components (yield form) ----
     ni = df['net_income_ttm'].fillna(df.get('net_income', np.nan)).fillna(0).astype(float)
     fcf = df['fcf_ttm'].fillna(df.get('fcf', np.nan)).fillna(0).astype(float)
     rev = df['revenue_ttm'].fillna(df.get('revenue', np.nan)).fillna(0).astype(float)
     ebit = df['ebitda_ttm'].fillna(df.get('ebitda', np.nan)).fillna(0).astype(float)
-    ev = df['enterprise_value'].astype(float)
     pb = df.get('pb', pd.Series(np.nan, index=df.index)).astype(float)
 
     ey = (ni / mkt).where(mkt > 0)
