@@ -1,0 +1,1131 @@
+{
+  "frozen_at": "2026-07-22T19:12:11.853552+00:00",
+  "git_head": "5829de6",
+  "cache_last_updated": "2026-07-22T14:08:56.621683",
+  "schema_version": "14",
+  "knobs": {
+    "RESAMPLE_SEED": 42,
+    "N_RESAMPLES": 1000,
+    "DECAY_ENABLED": true
+  },
+  "calib_sha256": {
+    "factor_decay.json": "3cca62bb1e6bc9b5972ca1b61d5f093875a6a1f88e56dfcc13b1fa8b1e3cd452",
+    "factor_etf_holdings.json": "8ba9e296e2d338eeb19cb01d5f70857431b7c6531a3b6aa1798c48bd9a9ba27d"
+  },
+  "score_cols": [
+    "potential_score",
+    "valuation_score",
+    "quality_score",
+    "growth_score",
+    "sentiment_score",
+    "top_decile_pct"
+  ],
+  "stats": {
+    "n_rows": 2514,
+    "n_potential_nonnull": 1583,
+    "potential_mean": 43.631908,
+    "potential_std": 12.161281,
+    "potential_q10": 25.876,
+    "potential_q50": 45.01,
+    "potential_q90": 57.478,
+    "n_xcheck_flagged": 96
+  },
+  "sentinels": {
+    "AAPL": {
+      "potential_score": 49.36,
+      "valuation_score": 38.44,
+      "quality_score": 80.81,
+      "growth_score": 52.43,
+      "sentiment_score": 41.69,
+      "top_decile_pct": 0.0
+    },
+    "AAWW": {
+      "potential_score": 73.82,
+      "valuation_score": 94.36,
+      "quality_score": 53.18,
+      "growth_score": 73.63,
+      "sentiment_score": null,
+      "top_decile_pct": 100.0
+    },
+    "AHR": {
+      "potential_score": null,
+      "valuation_score": null,
+      "quality_score": 14.07,
+      "growth_score": 100.0,
+      "sentiment_score": 57.67,
+      "top_decile_pct": 0.0
+    },
+    "ALIM": {
+      "potential_score": 43.88,
+      "valuation_score": null,
+      "quality_score": 40.57,
+      "growth_score": 69.3,
+      "sentiment_score": 32.25,
+      "top_decile_pct": 0.0
+    },
+    "ALTM": {
+      "potential_score": null,
+      "valuation_score": null,
+      "quality_score": 44.92,
+      "growth_score": 78.18,
+      "sentiment_score": 57.13,
+      "top_decile_pct": 0.0
+    },
+    "AMPS": {
+      "potential_score": null,
+      "valuation_score": null,
+      "quality_score": 30.52,
+      "growth_score": null,
+      "sentiment_score": 49.9,
+      "top_decile_pct": 0.0
+    },
+    "AOS": {
+      "potential_score": null,
+      "valuation_score": null,
+      "quality_score": 85.09,
+      "growth_score": 43.67,
+      "sentiment_score": 42.6,
+      "top_decile_pct": 70.6
+    },
+    "APP": {
+      "potential_score": 72.24,
+      "valuation_score": 26.17,
+      "quality_score": 73.16,
+      "growth_score": 85.94,
+      "sentiment_score": 85.86,
+      "top_decile_pct": 4.7
+    },
+    "ARIS": {
+      "potential_score": null,
+      "valuation_score": null,
+      "quality_score": 34.42,
+      "growth_score": 95.76,
+      "sentiment_score": 63.94,
+      "top_decile_pct": 2.5
+    },
+    "B": {
+      "potential_score": null,
+      "valuation_score": null,
+      "quality_score": 59.12,
+      "growth_score": 73.4,
+      "sentiment_score": 35.85,
+      "top_decile_pct": 1.2
+    },
+    "BBBY": {
+      "potential_score": 4.18,
+      "valuation_score": null,
+      "quality_score": 15.55,
+      "growth_score": 1.09,
+      "sentiment_score": 46.7,
+      "top_decile_pct": 0.0
+    },
+    "BHVN": {
+      "potential_score": null,
+      "valuation_score": null,
+      "quality_score": 12.77,
+      "growth_score": null,
+      "sentiment_score": 53.8,
+      "top_decile_pct": 0.0
+    },
+    "BRDG": {
+      "potential_score": null,
+      "valuation_score": null,
+      "quality_score": 82.47,
+      "growth_score": null,
+      "sentiment_score": 58.46,
+      "top_decile_pct": 3.3
+    },
+    "BROS": {
+      "potential_score": 68.51,
+      "valuation_score": null,
+      "quality_score": 38.27,
+      "growth_score": 95.41,
+      "sentiment_score": 80.06,
+      "top_decile_pct": 44.0
+    },
+    "BRP": {
+      "potential_score": null,
+      "valuation_score": null,
+      "quality_score": 29.13,
+      "growth_score": 54.16,
+      "sentiment_score": 62.48,
+      "top_decile_pct": 0.0
+    },
+    "BTBT": {
+      "potential_score": null,
+      "valuation_score": null,
+      "quality_score": 20.47,
+      "growth_score": null,
+      "sentiment_score": 50.8,
+      "top_decile_pct": 0.0
+    },
+    "BWMN": {
+      "potential_score": null,
+      "valuation_score": null,
+      "quality_score": 32.14,
+      "growth_score": null,
+      "sentiment_score": 37.81,
+      "top_decile_pct": 0.0
+    },
+    "CAR": {
+      "potential_score": null,
+      "valuation_score": null,
+      "quality_score": 33.36,
+      "growth_score": null,
+      "sentiment_score": 44.6,
+      "top_decile_pct": 0.0
+    },
+    "CDTX": {
+      "potential_score": null,
+      "valuation_score": null,
+      "quality_score": 15.53,
+      "growth_score": null,
+      "sentiment_score": 53.04,
+      "top_decile_pct": 0.0
+    },
+    "CELC": {
+      "potential_score": null,
+      "valuation_score": null,
+      "quality_score": null,
+      "growth_score": null,
+      "sentiment_score": 37.02,
+      "top_decile_pct": 0.0
+    },
+    "CEQP": {
+      "potential_score": null,
+      "valuation_score": null,
+      "quality_score": 23.0,
+      "growth_score": 58.61,
+      "sentiment_score": null,
+      "top_decile_pct": 0.0
+    },
+    "CFX": {
+      "potential_score": null,
+      "valuation_score": null,
+      "quality_score": 21.9,
+      "growth_score": 39.27,
+      "sentiment_score": null,
+      "top_decile_pct": 0.0
+    },
+    "CLSK": {
+      "potential_score": null,
+      "valuation_score": null,
+      "quality_score": 18.67,
+      "growth_score": null,
+      "sentiment_score": 47.03,
+      "top_decile_pct": 0.0
+    },
+    "CNNE": {
+      "potential_score": 5.58,
+      "valuation_score": 10.18,
+      "quality_score": 19.2,
+      "growth_score": 5.28,
+      "sentiment_score": 31.49,
+      "top_decile_pct": 0.0
+    },
+    "CNR": {
+      "potential_score": null,
+      "valuation_score": null,
+      "quality_score": 66.31,
+      "growth_score": 63.57,
+      "sentiment_score": 49.01,
+      "top_decile_pct": 0.1
+    },
+    "CNSL": {
+      "potential_score": null,
+      "valuation_score": null,
+      "quality_score": 39.54,
+      "growth_score": null,
+      "sentiment_score": 31.65,
+      "top_decile_pct": 0.0
+    },
+    "COKE": {
+      "potential_score": 67.65,
+      "valuation_score": 60.76,
+      "quality_score": 74.22,
+      "growth_score": 64.26,
+      "sentiment_score": 59.01,
+      "top_decile_pct": 100.0
+    },
+    "COST": {
+      "potential_score": 43.09,
+      "valuation_score": 9.85,
+      "quality_score": 60.03,
+      "growth_score": 69.31,
+      "sentiment_score": 50.26,
+      "top_decile_pct": 0.0
+    },
+    "CPK": {
+      "potential_score": null,
+      "valuation_score": null,
+      "quality_score": 70.81,
+      "growth_score": 66.67,
+      "sentiment_score": 53.32,
+      "top_decile_pct": 100.0
+    },
+    "CPRX": {
+      "potential_score": 74.0,
+      "valuation_score": 77.0,
+      "quality_score": 83.05,
+      "growth_score": 83.48,
+      "sentiment_score": 60.19,
+      "top_decile_pct": 100.0
+    },
+    "CRGY": {
+      "potential_score": null,
+      "valuation_score": null,
+      "quality_score": 38.92,
+      "growth_score": 97.58,
+      "sentiment_score": 55.56,
+      "top_decile_pct": 13.2
+    },
+    "CWEN": {
+      "potential_score": null,
+      "valuation_score": null,
+      "quality_score": 41.3,
+      "growth_score": 34.22,
+      "sentiment_score": 43.67,
+      "top_decile_pct": 0.0
+    },
+    "DBDR": {
+      "potential_score": null,
+      "valuation_score": null,
+      "quality_score": null,
+      "growth_score": null,
+      "sentiment_score": null,
+      "top_decile_pct": null
+    },
+    "DISH": {
+      "potential_score": 8.58,
+      "valuation_score": 24.67,
+      "quality_score": 19.7,
+      "growth_score": 11.05,
+      "sentiment_score": null,
+      "top_decile_pct": 0.0
+    },
+    "DKL": {
+      "potential_score": null,
+      "valuation_score": null,
+      "quality_score": 74.26,
+      "growth_score": null,
+      "sentiment_score": 39.62,
+      "top_decile_pct": 0.4
+    },
+    "DOC": {
+      "potential_score": null,
+      "valuation_score": null,
+      "quality_score": 43.35,
+      "growth_score": 66.7,
+      "sentiment_score": 36.98,
+      "top_decile_pct": 0.0
+    },
+    "DOCN": {
+      "potential_score": null,
+      "valuation_score": null,
+      "quality_score": 19.47,
+      "growth_score": null,
+      "sentiment_score": 51.07,
+      "top_decile_pct": 0.0
+    },
+    "DRQ": {
+      "potential_score": null,
+      "valuation_score": null,
+      "quality_score": 50.24,
+      "growth_score": 94.42,
+      "sentiment_score": 42.91,
+      "top_decile_pct": 51.2
+    },
+    "DYN": {
+      "potential_score": null,
+      "valuation_score": null,
+      "quality_score": null,
+      "growth_score": null,
+      "sentiment_score": 57.9,
+      "top_decile_pct": 0.0
+    },
+    "EFC": {
+      "potential_score": null,
+      "valuation_score": null,
+      "quality_score": 64.84,
+      "growth_score": null,
+      "sentiment_score": 44.56,
+      "top_decile_pct": 0.0
+    },
+    "ESTE": {
+      "potential_score": null,
+      "valuation_score": null,
+      "quality_score": 32.84,
+      "growth_score": 94.35,
+      "sentiment_score": null,
+      "top_decile_pct": 0.0
+    },
+    "EXOD": {
+      "potential_score": null,
+      "valuation_score": null,
+      "quality_score": 76.21,
+      "growth_score": null,
+      "sentiment_score": 96.21,
+      "top_decile_pct": 3.3
+    },
+    "FBRT": {
+      "potential_score": null,
+      "valuation_score": null,
+      "quality_score": 66.73,
+      "growth_score": null,
+      "sentiment_score": 25.15,
+      "top_decile_pct": 0.0
+    },
+    "FLOC": {
+      "potential_score": null,
+      "valuation_score": null,
+      "quality_score": null,
+      "growth_score": null,
+      "sentiment_score": null,
+      "top_decile_pct": null
+    },
+    "FLWS": {
+      "potential_score": 9.44,
+      "valuation_score": 22.16,
+      "quality_score": 25.28,
+      "growth_score": 7.69,
+      "sentiment_score": 48.42,
+      "top_decile_pct": 0.0
+    },
+    "FNMA": {
+      "potential_score": null,
+      "valuation_score": null,
+      "quality_score": null,
+      "growth_score": null,
+      "sentiment_score": null,
+      "top_decile_pct": null
+    },
+    "FOUR": {
+      "potential_score": 67.36,
+      "valuation_score": 79.23,
+      "quality_score": 46.82,
+      "growth_score": 85.71,
+      "sentiment_score": 62.4,
+      "top_decile_pct": 99.9
+    },
+    "FUBO": {
+      "potential_score": 51.2,
+      "valuation_score": null,
+      "quality_score": 5.93,
+      "growth_score": 79.29,
+      "sentiment_score": 91.07,
+      "top_decile_pct": 0.0
+    },
+    "GBDC": {
+      "potential_score": null,
+      "valuation_score": null,
+      "quality_score": 37.97,
+      "growth_score": null,
+      "sentiment_score": 19.86,
+      "top_decile_pct": 0.0
+    },
+    "GCT": {
+      "potential_score": null,
+      "valuation_score": null,
+      "quality_score": 73.17,
+      "growth_score": null,
+      "sentiment_score": 36.27,
+      "top_decile_pct": 0.0
+    },
+    "GEF": {
+      "potential_score": null,
+      "valuation_score": null,
+      "quality_score": 52.19,
+      "growth_score": 10.14,
+      "sentiment_score": 43.17,
+      "top_decile_pct": 0.0
+    },
+    "GMED": {
+      "potential_score": 68.08,
+      "valuation_score": 69.39,
+      "quality_score": 66.52,
+      "growth_score": 79.41,
+      "sentiment_score": 51.05,
+      "top_decile_pct": 100.0
+    },
+    "HALO": {
+      "potential_score": 67.22,
+      "valuation_score": 67.88,
+      "quality_score": 75.31,
+      "growth_score": 77.4,
+      "sentiment_score": 47.0,
+      "top_decile_pct": 100.0
+    },
+    "HESM": {
+      "potential_score": null,
+      "valuation_score": null,
+      "quality_score": 61.85,
+      "growth_score": 57.47,
+      "sentiment_score": 50.05,
+      "top_decile_pct": 0.0
+    },
+    "HIMX": {
+      "potential_score": 28.22,
+      "valuation_score": null,
+      "quality_score": 50.78,
+      "growth_score": 11.34,
+      "sentiment_score": 64.95,
+      "top_decile_pct": 0.0
+    },
+    "HMC": {
+      "potential_score": 27.7,
+      "valuation_score": null,
+      "quality_score": 39.3,
+      "growth_score": 41.21,
+      "sentiment_score": 27.05,
+      "top_decile_pct": 0.0
+    },
+    "HPP": {
+      "potential_score": null,
+      "valuation_score": null,
+      "quality_score": 24.42,
+      "growth_score": 8.57,
+      "sentiment_score": 50.21,
+      "top_decile_pct": 0.0
+    },
+    "IDCC": {
+      "potential_score": 70.89,
+      "valuation_score": 60.6,
+      "quality_score": 79.44,
+      "growth_score": 88.96,
+      "sentiment_score": 59.14,
+      "top_decile_pct": 100.0
+    },
+    "IMGO": {
+      "potential_score": null,
+      "valuation_score": null,
+      "quality_score": null,
+      "growth_score": null,
+      "sentiment_score": null,
+      "top_decile_pct": 0.0
+    },
+    "INBX": {
+      "potential_score": 11.33,
+      "valuation_score": null,
+      "quality_score": 8.24,
+      "growth_score": 7.31,
+      "sentiment_score": 39.72,
+      "top_decile_pct": 0.0
+    },
+    "INCY": {
+      "potential_score": 66.98,
+      "valuation_score": 75.87,
+      "quality_score": 79.34,
+      "growth_score": 62.72,
+      "sentiment_score": 51.61,
+      "top_decile_pct": 100.0
+    },
+    "INDT": {
+      "potential_score": null,
+      "valuation_score": null,
+      "quality_score": 11.58,
+      "growth_score": null,
+      "sentiment_score": null,
+      "top_decile_pct": 0.0
+    },
+    "IONQ": {
+      "potential_score": 68.89,
+      "valuation_score": null,
+      "quality_score": 18.12,
+      "growth_score": 99.62,
+      "sentiment_score": 73.97,
+      "top_decile_pct": 0.0
+    },
+    "IOVA": {
+      "potential_score": null,
+      "valuation_score": null,
+      "quality_score": 14.69,
+      "growth_score": null,
+      "sentiment_score": 52.72,
+      "top_decile_pct": 0.0
+    },
+    "IPXX": {
+      "potential_score": null,
+      "valuation_score": null,
+      "quality_score": null,
+      "growth_score": null,
+      "sentiment_score": null,
+      "top_decile_pct": null
+    },
+    "IREN": {
+      "potential_score": null,
+      "valuation_score": null,
+      "quality_score": 14.71,
+      "growth_score": 98.91,
+      "sentiment_score": 22.08,
+      "top_decile_pct": 0.0
+    },
+    "JELD": {
+      "potential_score": 6.54,
+      "valuation_score": 22.75,
+      "quality_score": 13.3,
+      "growth_score": 4.5,
+      "sentiment_score": 50.28,
+      "top_decile_pct": 0.0
+    },
+    "JFIN": {
+      "potential_score": 69.3,
+      "valuation_score": null,
+      "quality_score": 68.14,
+      "growth_score": 98.39,
+      "sentiment_score": 53.32,
+      "top_decile_pct": 100.0
+    },
+    "KO": {
+      "potential_score": 42.31,
+      "valuation_score": 20.75,
+      "quality_score": 75.73,
+      "growth_score": 34.69,
+      "sentiment_score": 38.67,
+      "top_decile_pct": 0.0
+    },
+    "LAUR": {
+      "potential_score": 69.1,
+      "valuation_score": 71.83,
+      "quality_score": 75.13,
+      "growth_score": null,
+      "sentiment_score": 53.64,
+      "top_decile_pct": 100.0
+    },
+    "LBPH": {
+      "potential_score": null,
+      "valuation_score": null,
+      "quality_score": null,
+      "growth_score": null,
+      "sentiment_score": 46.81,
+      "top_decile_pct": 0.0
+    },
+    "LFG": {
+      "potential_score": null,
+      "valuation_score": null,
+      "quality_score": 19.22,
+      "growth_score": null,
+      "sentiment_score": null,
+      "top_decile_pct": 0.0
+    },
+    "LLY": {
+      "potential_score": 49.02,
+      "valuation_score": 19.68,
+      "quality_score": 67.06,
+      "growth_score": 74.52,
+      "sentiment_score": 32.89,
+      "top_decile_pct": 0.0
+    },
+    "LRN": {
+      "potential_score": 73.91,
+      "valuation_score": 62.28,
+      "quality_score": 67.0,
+      "growth_score": 85.52,
+      "sentiment_score": 80.78,
+      "top_decile_pct": 100.0
+    },
+    "LVWR": {
+      "potential_score": 7.82,
+      "valuation_score": 3.95,
+      "quality_score": 9.88,
+      "growth_score": 4.62,
+      "sentiment_score": 72.92,
+      "top_decile_pct": 0.0
+    },
+    "MACQ": {
+      "potential_score": null,
+      "valuation_score": null,
+      "quality_score": null,
+      "growth_score": null,
+      "sentiment_score": null,
+      "top_decile_pct": null
+    },
+    "MDU": {
+      "potential_score": null,
+      "valuation_score": null,
+      "quality_score": 69.35,
+      "growth_score": null,
+      "sentiment_score": 75.29,
+      "top_decile_pct": 3.3
+    },
+    "MKC": {
+      "potential_score": null,
+      "valuation_score": null,
+      "quality_score": 56.57,
+      "growth_score": 37.44,
+      "sentiment_score": 51.66,
+      "top_decile_pct": 0.0
+    },
+    "MNDY": {
+      "potential_score": 67.06,
+      "valuation_score": null,
+      "quality_score": 54.08,
+      "growth_score": 87.94,
+      "sentiment_score": 52.36,
+      "top_decile_pct": 69.6
+    },
+    "MRVI": {
+      "potential_score": 21.85,
+      "valuation_score": null,
+      "quality_score": 45.33,
+      "growth_score": 6.64,
+      "sentiment_score": 48.73,
+      "top_decile_pct": 0.0
+    },
+    "MSFT": {
+      "potential_score": 46.55,
+      "valuation_score": 30.72,
+      "quality_score": 79.48,
+      "growth_score": 51.68,
+      "sentiment_score": 25.25,
+      "top_decile_pct": 0.0
+    },
+    "MTSR": {
+      "potential_score": null,
+      "valuation_score": null,
+      "quality_score": null,
+      "growth_score": null,
+      "sentiment_score": null,
+      "top_decile_pct": null
+    },
+    "NBR": {
+      "potential_score": null,
+      "valuation_score": null,
+      "quality_score": 28.69,
+      "growth_score": 48.47,
+      "sentiment_score": 52.53,
+      "top_decile_pct": 0.0
+    },
+    "NE": {
+      "potential_score": null,
+      "valuation_score": null,
+      "quality_score": 50.84,
+      "growth_score": 87.33,
+      "sentiment_score": 46.81,
+      "top_decile_pct": 22.1
+    },
+    "NEE": {
+      "potential_score": 58.19,
+      "valuation_score": 23.63,
+      "quality_score": 74.34,
+      "growth_score": 70.52,
+      "sentiment_score": 46.11,
+      "top_decile_pct": 0.0
+    },
+    "NEM": {
+      "potential_score": 68.33,
+      "valuation_score": 75.11,
+      "quality_score": 63.3,
+      "growth_score": 89.95,
+      "sentiment_score": 37.91,
+      "top_decile_pct": 100.0
+    },
+    "NEO": {
+      "potential_score": 44.15,
+      "valuation_score": null,
+      "quality_score": 54.13,
+      "growth_score": 49.13,
+      "sentiment_score": 52.01,
+      "top_decile_pct": 0.0
+    },
+    "NKTR": {
+      "potential_score": 7.93,
+      "valuation_score": 14.51,
+      "quality_score": 26.69,
+      "growth_score": 8.47,
+      "sentiment_score": 16.73,
+      "top_decile_pct": 0.0
+    },
+    "NLTX": {
+      "potential_score": null,
+      "valuation_score": null,
+      "quality_score": null,
+      "growth_score": null,
+      "sentiment_score": 52.64,
+      "top_decile_pct": 0.0
+    },
+    "NNDM": {
+      "potential_score": null,
+      "valuation_score": null,
+      "quality_score": 22.28,
+      "growth_score": 90.23,
+      "sentiment_score": 48.36,
+      "top_decile_pct": 0.0
+    },
+    "NPWR": {
+      "potential_score": null,
+      "valuation_score": null,
+      "quality_score": 14.83,
+      "growth_score": null,
+      "sentiment_score": 50.08,
+      "top_decile_pct": 0.0
+    },
+    "NTES": {
+      "potential_score": 40.08,
+      "valuation_score": null,
+      "quality_score": 86.88,
+      "growth_score": 29.4,
+      "sentiment_score": 46.02,
+      "top_decile_pct": 18.7
+    },
+    "NUTX": {
+      "potential_score": 71.39,
+      "valuation_score": 94.45,
+      "quality_score": 64.67,
+      "growth_score": 88.56,
+      "sentiment_score": 87.31,
+      "top_decile_pct": 100.0
+    },
+    "NUVB": {
+      "potential_score": null,
+      "valuation_score": null,
+      "quality_score": null,
+      "growth_score": null,
+      "sentiment_score": 50.7,
+      "top_decile_pct": 0.0
+    },
+    "NVDA": {
+      "potential_score": 58.58,
+      "valuation_score": 17.56,
+      "quality_score": 81.32,
+      "growth_score": 96.46,
+      "sentiment_score": 34.51,
+      "top_decile_pct": 0.0
+    },
+    "O": {
+      "potential_score": null,
+      "valuation_score": null,
+      "quality_score": 43.52,
+      "growth_score": null,
+      "sentiment_score": 47.34,
+      "top_decile_pct": 0.0
+    },
+    "OMP": {
+      "potential_score": null,
+      "valuation_score": null,
+      "quality_score": 57.13,
+      "growth_score": null,
+      "sentiment_score": null,
+      "top_decile_pct": 0.0
+    },
+    "ORC": {
+      "potential_score": null,
+      "valuation_score": null,
+      "quality_score": null,
+      "growth_score": null,
+      "sentiment_score": 28.1,
+      "top_decile_pct": 0.0
+    },
+    "OTTR": {
+      "potential_score": 69.99,
+      "valuation_score": 73.85,
+      "quality_score": 89.98,
+      "growth_score": 53.56,
+      "sentiment_score": 48.06,
+      "top_decile_pct": 100.0
+    },
+    "PAAS": {
+      "potential_score": null,
+      "valuation_score": null,
+      "quality_score": null,
+      "growth_score": null,
+      "sentiment_score": null,
+      "top_decile_pct": null
+    },
+    "PLD": {
+      "potential_score": 47.18,
+      "valuation_score": 15.74,
+      "quality_score": 72.66,
+      "growth_score": 61.96,
+      "sentiment_score": 42.49,
+      "top_decile_pct": 0.0
+    },
+    "POWL": {
+      "potential_score": 67.06,
+      "valuation_score": 55.32,
+      "quality_score": 74.02,
+      "growth_score": 83.45,
+      "sentiment_score": 85.87,
+      "top_decile_pct": 100.0
+    },
+    "PPC": {
+      "potential_score": 73.14,
+      "valuation_score": 87.84,
+      "quality_score": 61.55,
+      "growth_score": 63.94,
+      "sentiment_score": 65.37,
+      "top_decile_pct": 100.0
+    },
+    "REAL": {
+      "potential_score": 51.53,
+      "valuation_score": null,
+      "quality_score": 15.12,
+      "growth_score": 75.76,
+      "sentiment_score": 94.44,
+      "top_decile_pct": 0.0
+    },
+    "RIGL": {
+      "potential_score": 75.06,
+      "valuation_score": null,
+      "quality_score": 76.45,
+      "growth_score": 88.66,
+      "sentiment_score": 76.6,
+      "top_decile_pct": 100.0
+    },
+    "RIOT": {
+      "potential_score": null,
+      "valuation_score": null,
+      "quality_score": 10.77,
+      "growth_score": null,
+      "sentiment_score": 61.9,
+      "top_decile_pct": 0.0
+    },
+    "RPAY": {
+      "potential_score": 38.26,
+      "valuation_score": null,
+      "quality_score": 54.91,
+      "growth_score": 50.71,
+      "sentiment_score": 48.9,
+      "top_decile_pct": 0.0
+    },
+    "SCWX": {
+      "potential_score": 3.0,
+      "valuation_score": 25.3,
+      "quality_score": 23.8,
+      "growth_score": 2.48,
+      "sentiment_score": 38.73,
+      "top_decile_pct": 0.0
+    },
+    "SHLX": {
+      "potential_score": null,
+      "valuation_score": null,
+      "quality_score": 84.9,
+      "growth_score": null,
+      "sentiment_score": null,
+      "top_decile_pct": 0.0
+    },
+    "SIMO": {
+      "potential_score": 32.04,
+      "valuation_score": null,
+      "quality_score": 55.0,
+      "growth_score": 35.1,
+      "sentiment_score": 28.55,
+      "top_decile_pct": 0.0
+    },
+    "SITC": {
+      "potential_score": null,
+      "valuation_score": null,
+      "quality_score": 45.41,
+      "growth_score": null,
+      "sentiment_score": 31.08,
+      "top_decile_pct": 0.0
+    },
+    "SLDB": {
+      "potential_score": null,
+      "valuation_score": null,
+      "quality_score": 13.85,
+      "growth_score": null,
+      "sentiment_score": 48.67,
+      "top_decile_pct": 0.0
+    },
+    "SMR": {
+      "potential_score": null,
+      "valuation_score": null,
+      "quality_score": 8.11,
+      "growth_score": 97.73,
+      "sentiment_score": 75.56,
+      "top_decile_pct": 0.0
+    },
+    "SNDL": {
+      "potential_score": 59.44,
+      "valuation_score": null,
+      "quality_score": 39.1,
+      "growth_score": 95.15,
+      "sentiment_score": 44.55,
+      "top_decile_pct": 0.9
+    },
+    "STEP": {
+      "potential_score": null,
+      "valuation_score": null,
+      "quality_score": 48.5,
+      "growth_score": null,
+      "sentiment_score": 64.13,
+      "top_decile_pct": 0.0
+    },
+    "STLA": {
+      "potential_score": 66.29,
+      "valuation_score": null,
+      "quality_score": 60.25,
+      "growth_score": 99.38,
+      "sentiment_score": 48.12,
+      "top_decile_pct": 100.0
+    },
+    "SUN": {
+      "potential_score": null,
+      "valuation_score": null,
+      "quality_score": 50.08,
+      "growth_score": 41.18,
+      "sentiment_score": 41.84,
+      "top_decile_pct": 0.0
+    },
+    "SYRE": {
+      "potential_score": null,
+      "valuation_score": null,
+      "quality_score": 14.52,
+      "growth_score": null,
+      "sentiment_score": 56.3,
+      "top_decile_pct": 0.0
+    },
+    "TCOM": {
+      "potential_score": 68.69,
+      "valuation_score": null,
+      "quality_score": 59.95,
+      "growth_score": 95.65,
+      "sentiment_score": 61.7,
+      "top_decile_pct": 100.0
+    },
+    "TELL": {
+      "potential_score": null,
+      "valuation_score": null,
+      "quality_score": 7.72,
+      "growth_score": 90.32,
+      "sentiment_score": 56.5,
+      "top_decile_pct": 0.0
+    },
+    "TVTX": {
+      "potential_score": null,
+      "valuation_score": null,
+      "quality_score": 29.76,
+      "growth_score": null,
+      "sentiment_score": 71.37,
+      "top_decile_pct": 0.0
+    },
+    "UMH": {
+      "potential_score": null,
+      "valuation_score": null,
+      "quality_score": 32.71,
+      "growth_score": null,
+      "sentiment_score": 54.54,
+      "top_decile_pct": 0.0
+    },
+    "UP": {
+      "potential_score": 4.85,
+      "valuation_score": 9.51,
+      "quality_score": 3.02,
+      "growth_score": 6.0,
+      "sentiment_score": 50.0,
+      "top_decile_pct": 0.0
+    },
+    "UTHR": {
+      "potential_score": 67.73,
+      "valuation_score": 81.31,
+      "quality_score": 84.79,
+      "growth_score": 65.78,
+      "sentiment_score": 40.98,
+      "top_decile_pct": 100.0
+    },
+    "UTZ": {
+      "potential_score": null,
+      "valuation_score": null,
+      "quality_score": 34.53,
+      "growth_score": 70.64,
+      "sentiment_score": 50.77,
+      "top_decile_pct": 0.0
+    },
+    "UWMC": {
+      "potential_score": null,
+      "valuation_score": null,
+      "quality_score": null,
+      "growth_score": null,
+      "sentiment_score": null,
+      "top_decile_pct": null
+    },
+    "VEC": {
+      "potential_score": null,
+      "valuation_score": null,
+      "quality_score": 21.76,
+      "growth_score": 82.18,
+      "sentiment_score": null,
+      "top_decile_pct": 0.0
+    },
+    "VICI": {
+      "potential_score": 66.97,
+      "valuation_score": 58.28,
+      "quality_score": 85.64,
+      "growth_score": 70.91,
+      "sentiment_score": 49.11,
+      "top_decile_pct": 100.0
+    },
+    "VNOM": {
+      "potential_score": null,
+      "valuation_score": null,
+      "quality_score": 54.69,
+      "growth_score": 50.16,
+      "sentiment_score": 72.29,
+      "top_decile_pct": 0.0
+    },
+    "VOD": {
+      "potential_score": null,
+      "valuation_score": null,
+      "quality_score": 66.81,
+      "growth_score": null,
+      "sentiment_score": 33.45,
+      "top_decile_pct": 0.0
+    },
+    "VOR": {
+      "potential_score": null,
+      "valuation_score": null,
+      "quality_score": null,
+      "growth_score": null,
+      "sentiment_score": 8.93,
+      "top_decile_pct": 0.0
+    },
+    "WEST": {
+      "potential_score": null,
+      "valuation_score": null,
+      "quality_score": 9.67,
+      "growth_score": null,
+      "sentiment_score": 52.71,
+      "top_decile_pct": 0.0
+    },
+    "WW": {
+      "potential_score": 3.57,
+      "valuation_score": null,
+      "quality_score": 33.96,
+      "growth_score": 16.73,
+      "sentiment_score": 8.96,
+      "top_decile_pct": 0.0
+    },
+    "XNET": {
+      "potential_score": 52.5,
+      "valuation_score": null,
+      "quality_score": 47.48,
+      "growth_score": 65.56,
+      "sentiment_score": 85.91,
+      "top_decile_pct": 1.7
+    },
+    "XOM": {
+      "potential_score": null,
+      "valuation_score": null,
+      "quality_score": 67.2,
+      "growth_score": 50.24,
+      "sentiment_score": 41.58,
+      "top_decile_pct": 0.0
+    },
+    "YMM": {
+      "potential_score": null,
+      "valuation_score": null,
+      "quality_score": null,
+      "growth_score": null,
+      "sentiment_score": 50.85,
+      "top_decile_pct": 0.0
+    },
+    "YOU": {
+      "potential_score": 69.19,
+      "valuation_score": null,
+      "quality_score": 69.87,
+      "growth_score": 83.24,
+      "sentiment_score": 67.72,
+      "top_decile_pct": 100.0
+    }
+  }
+}
