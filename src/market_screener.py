@@ -1820,11 +1820,11 @@ def compute_potential_scores(df, verbose=True):
     # earnings_yield = NI_ttm / market_cap. Force zero if NI<=0 (had data, just bad).
     ni = df['net_income_ttm']
     ey = (ni / mkt).where(mkt > 0)
-    ey_fz = ni.notna() & (ni <= 0)
+    ey_fz = ni.notna() & (ni <= 0) & ~_xcheck_mask
     # fcf_yield = FCF_ttm / market_cap. Force zero on negative FCF.
     fcf = df['fcf_ttm']
     fy = (fcf / mkt).where(mkt > 0)
-    fy_fz = fcf.notna() & (fcf <= 0)
+    fy_fz = fcf.notna() & (fcf <= 0) & ~_xcheck_mask
     # sales_yield = revenue_ttm / market_cap. Always positive when data exists.
     rev = df['revenue_ttm']
     sy = (rev / mkt).where(mkt > 0)
@@ -1834,7 +1834,7 @@ def compute_potential_scores(df, verbose=True):
     # extremely rare (net-cash company with no debt) — treat as "missing" not "bad."
     ebt = df['ebitda_ttm']
     eby = (ebt / ev).where((ev > 0))
-    eby_fz = ebt.notna() & (ebt <= 0) & (ev > 0)
+    eby_fz = ebt.notna() & (ebt <= 0) & (ev > 0) & ~_xcheck_mask
     val_scores = pd.DataFrame({
         'earnings_yield': _rank_within(ey, sg, ey_fz),
         'fcf_yield':      _rank_within(fy, sg, fy_fz),
@@ -3990,13 +3990,13 @@ def compute_potential_scores_v2(df, gics_map=None, verbose=True):
     pb = df.get('pb', pd.Series(np.nan, index=df.index)).astype(float)
 
     ey = (ni / mkt).where(mkt > 0)
-    ey_fz = ni.notna() & (ni <= 0)
+    ey_fz = ni.notna() & (ni <= 0) & ~_xcheck_mask
     fy = (fcf / mkt).where(mkt > 0)
-    fy_fz = fcf.notna() & (fcf <= 0)
+    fy_fz = fcf.notna() & (fcf <= 0) & ~_xcheck_mask
     sy = (rev / mkt).where(mkt > 0)
     by = (1.0 / pb).where(pb.notna() & (pb > 0))
     eby = (ebit / ev).where(ev > 0)
-    eby_fz = ebit.notna() & (ebit <= 0) & (ev > 0)
+    eby_fz = ebit.notna() & (ebit <= 0) & (ev > 0) & ~_xcheck_mask
 
     # Sector-specific valuation metrics
     ptbv = df.get('ptbv', pd.Series(np.nan, index=df.index))
